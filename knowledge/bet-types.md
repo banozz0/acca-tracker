@@ -36,7 +36,7 @@ Use `UNVERIFIABLE` unless reliable source data is available.
 - `LOST` — final result clearly fails the leg.
 - `DEAD` — live result has already made the leg impossible, such as BTTS No after both teams score.
 - `VOID` — source indicates postponement/cancellation or a push rule likely applies.
-- `UNVERIFIABLE` — required data is unavailable, conflicting, ambiguous, or unsupported.
+- `UNVERIFIABLE` — required data is unavailable, conflicting, ambiguous, or unsupported. This is non-terminal and should be retried while tracking continues.
 
 ## Conservative logic examples
 
@@ -82,8 +82,8 @@ Use `UNVERIFIABLE` unless reliable source data is available.
 - `ALIVE` — no leg is lost/dead, and at least one live leg is winning or pending.
 - `PENDING` — no leg is lost/dead, but matches have not started or data is incomplete.
 - `DEAD` — at least one leg is lost or dead.
-- `UNVERIFIABLE` — one or more required legs cannot be verified from available public data.
+- `UNVERIFIABLE` — one or more required legs cannot be verified from available public data; this does not complete tracking by itself.
 
 ## Reporting rule
 
-If the bet type cannot be evaluated from available public data, say so directly and mark it `UNVERIFIABLE` instead of inventing logic.
+If the bet type cannot be evaluated from available public data, say so directly and mark it `UNVERIFIABLE` instead of inventing logic. Keep tracking unless all legs are final/settled, max checks are reached, or the user stops it.

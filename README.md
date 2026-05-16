@@ -1,5 +1,7 @@
 # Acca Tracker
 
+Version: 2.0.2
+
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
 It helps a Hermes agent parse a football betting slip, confirm the legs with the user, optionally create a bounded tracking job, and report whether each leg is alive, dead, won, pending, void, or unverifiable.
@@ -10,9 +12,11 @@ It helps a Hermes agent parse a football betting slip, confirm the legs with the
 - Shows a parsed preview before any tracking starts.
 - Asks the user to confirm or correct the legs.
 - Creates optional bounded Hermes cron jobs for status checks.
-- Checks public score/status sources and cites them in reports.
+- Checks public score/status sources with a conservative retrieval ladder and cites them in reports.
+- Uses compact Telegram/mobile-friendly status updates.
+- Sends recurring tracker updates as compact fenced `text` codeblocks for cleaner mobile scanning.
 - Reports each leg status and the overall acca status.
-- Handles missing, ambiguous, or conflicting data as `UNVERIFIABLE` instead of guessing.
+- Handles missing, ambiguous, or conflicting data as non-terminal `UNVERIFIABLE` instead of guessing.
 
 ## What it does not do
 
@@ -114,7 +118,7 @@ Tracking jobs may persist confirmed match details in Hermes scheduler state/outp
 - Bookmaker settlement rules can differ from public match status.
 - The skill does not verify actual bookmaker settlement.
 
-See [`docs/runtime-notes.md`](docs/runtime-notes.md) and [`knowledge/data-sources.md`](knowledge/data-sources.md).
+See [`docs/runtime-notes.md`](docs/runtime-notes.md), [`docs/compact-report-format.md`](docs/compact-report-format.md), and [`knowledge/data-sources.md`](knowledge/data-sources.md).
 
 ## Responsible use
 

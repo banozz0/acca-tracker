@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: Read-only football accumulator/parlay tracking assistant for Hermes. Parses a slip, confirms legs, optionally creates a tracking job, and reports whether each leg is alive, dead, won, pending, void, or unverifiable without giving betting advice.
-version: 2.0.0
+version: 2.0.2
 author: Hermes Agent community
 license: MIT
 tags: [football, sports, accumulator, parlay, live-scores, bet-tracking]
@@ -75,9 +75,9 @@ See `knowledge/bet-types.md` for status logic and edge cases.
 3. Ask for explicit confirmation before creating any tracking job.
 4. If confirmed, create a bounded Hermes cron job.
 5. Each run checks score/status using cited sources.
-6. Report each leg as won, winning, pending, lost, dead, void, or unverifiable.
+6. Report each leg as won, winning, pending, lost, dead, void, or unverifiable. Treat unverifiable/data-unavailable states as retryable, not terminal.
 7. Explain what happens next: next check time, expiry/repeat limit, and how to stop.
-8. Stop tracking when complete, when repeat count expires, or when the user asks to stop.
+8. Stop tracking only when every leg is final/settled, when repeat count expires, or when the user asks to stop. Lookup failure alone must not complete tracking.
 
 ## Parse a slip
 
@@ -143,7 +143,7 @@ Scheduling guidance:
 
 ## Tracking prompt template
 
-```text
+````text
 You are tracking an already-placed football accumulator/parlay as a read-only status assistant.
 
 BOUNDARIES:
@@ -156,30 +156,71 @@ SLIP DETAILS:
 <paste confirmed legs with teams, date/time, market, odds if available, and settlement notes>
 
 TASK:
-1. Check reliable public score/status sources for each match.
-2. Cite the source name or URL used for each leg.
-3. Determine match status: not started, live, HT, FT, postponed, abandoned, cancelled, or unavailable.
-4. Determine leg status: WON, WINNING, PENDING, LOST, DEAD, VOID, or UNVERIFIABLE.
-5. Determine overall status: ALIVE, DEAD, WON, PENDING, or UNVERIFIABLE.
-6. If team matching is ambiguous, mark the leg UNVERIFIABLE and explain the ambiguity.
-7. If data is missing, stale, or conflicting, label the leg UNVERIFIABLE and explain what is missing.
-8. If one leg is lost/dead, mark the overall acca DEAD, but continue reporting other legs as status information only.
-9. If every match is final or void/unverifiable, include TRACKING COMPLETE.
+1. Normalize team names before searching: remove FC/AFC/CF/SC suffix noise, expand common abbreviations only when obvious, preserve original names in the report, and keep aliases paired with competition/date.
+2. Build 3-5 targeted queries per leg before giving up:
+   - "<home> <away> live score <date> <competition>"
+   - "<home> vs <away> result <date>"
+   - "<home> <away> SofaScore <date>"
+   - "<home> <away> ESPN BBC <competition>"
+   - "<competition/team official> <home> <away> match centre"
+3. Check reliable public score/status sources in this conservative ladder:
+   a. TheSportsDB eventsday/search where team/date coverage exists.
+   b. SofaScore public pages/search-result text only when readable and clearly matched; do not call it an official public API.
+   c. ESPN, BBC Sport, Sky/TNT/Guardian, or equivalent reputable match centres.
+   d. Official competition/team pages.
+   e. General web search snippets as context only, not sole proof when unclear.
+4. Match by both teams, competition/league, date/kickoff window, and home/away orientation when relevant. If a source matches only one team or a different date/competition, keep searching.
+5. Cite the source name or URL used for each leg; for failures, cite the compact source group checked.
+6. Determine match status: not started, live, HT, FT, postponed, abandoned, cancelled, or unavailable.
+7. Determine leg status: WON, WINNING, PENDING, LOST, DEAD, VOID, or UNVERIFIABLE.
+8. Determine overall status: LIVE, PARTIAL, DEAD, WON, PENDING, or UNVERIFIABLE.
+9. If team matching is ambiguous, mark the leg UNVERIFIABLE and explain the ambiguity in one short phrase.
+10. If data is missing, stale, or conflicting after the source ladder, label the leg UNVERIFIABLE and briefly state the mismatch/failure. UNVERIFIABLE, DATA_UNAVAILABLE, and UNKNOWN are non-terminal states.
+11. If one leg is lost/dead, mark the overall acca DEAD, but continue reporting other legs as status information only.
+12. Include TRACKING COMPLETE only when every leg is terminal/settled: WON, LOST, DEAD, VOID, final-settled, cancelled/postponed with explicit settlement note, or the bounded repeat count has expired. Never complete tracking just because lookup failed.
 
-REPORT FORMAT:
-🏟️ Acca status — <time + timezone>
+REPORT FORMAT (compact Telegram/mobile):
+Return recurring tracker updates as one compact fenced text block. Put only the codeblock in the scheduled update unless a safety refusal is needed outside it.
 
-Overall: <ALIVE / DEAD / WON / PENDING / UNVERIFIABLE>
+```text
+⚽️ Acca update -- <HH:MM timezone>
+Overall: <emoji> <LIVE / PARTIAL / DEAD / WON / PENDING / UNVERIFIABLE>
+Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
 
-1. <Match> — <score/status> — <market> — <leg status>
-   Source: <source name or URL>
-   Confidence: <high / medium / low / unverifiable>
-   Note: <brief reason, ambiguity, or “no issue”>
+1) <Match>
+   Market: <short market wording>
+   Score: <score + match clock/status, or unavailable>
+   Status: <emoji> <WON / WINNING / PENDING / LOST / DEAD / VOID / UNVERIFIABLE>
+   Source: <source name or URL, or sources checked>
+   Next: <retry HH:MM / kickoff HH:MM / final / status only>
 
-Summary: <won/winning/pending/lost/dead/void/unverifiable counts>
-Next: <next scheduled check or TRACKING COMPLETE>
-Boundary: status tracking only; not betting or cash-out advice.
+Note: <only if needed: one short source mismatch/failure caveat>
+
+Next check: <HH:MM timezone>
+Boundary: status only, no betting/cash-out advice.
 ```
+
+Formatting rules:
+- Keep each leg to at most 4-5 short lines.
+- Put caveats once at the bottom, not repeated in every leg.
+- Use sparse clear emojis: ✅ won, 🟢 currently winning/live, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
+- Include a source/citation for each leg.
+- Include Next check when continuing and make the next retry time explicit.
+- Keep most lines under ~72 characters for mobile scanning.
+- Preserve source lines and the next-check line inside the fenced text block.
+- Use TRACKING COMPLETE only when terminal conditions are actually met.
+````
+
+## Updating active tracking jobs after skill fixes
+
+Skill edits do not automatically change cron jobs that were already created with an older prompt. If a live tracker exposed a behavior bug and the skill is patched, update or recreate the active `acca-tracker-*` job prompt in the same session when the user expects the current tracker to improve immediately.
+
+When updating a live job:
+
+1. Keep the existing schedule, repeat budget, delivery target, and confirmed slip details unless the user asks otherwise.
+2. Patch only the self-contained tracking prompt to include the corrected status logic, source policy, and compact format.
+3. Verify the job remains enabled and report the next run time.
+4. Do not touch unrelated scheduler jobs or account/bookmaker integrations.
 
 ## Stop tracking
 
@@ -204,6 +245,9 @@ Principles:
 - Cite sources in reports.
 - Use `UNVERIFIABLE` instead of guessing.
 - Treat low-tier leagues, ambiguous team names, and exotic markets as lower confidence.
+- Source priority: TheSportsDB/public structured data when available; SofaScore public page/search result when readable and clearly matched; ESPN/BBC/Sky/TNT/Guardian; official league/team pages; fallback search; then `UNVERIFIABLE` and continue tracking.
+- SofaScore may be used as a normal public-source fallback via web search/extract against public pages or search results. Do not describe it as an official public API. If blocked, unreadable, or ambiguous, mark the source unavailable and continue.
+- Do not stop after one failed source. Retry with normalized team names, aliases, competition/date terms, and official-source phrasing before marking a legitimate public fixture `UNVERIFIABLE`.
 
 ## Cash-out and payout handling
 
@@ -230,6 +274,7 @@ Do not estimate or recommend cash-out decisions. If the user asks, explain that 
 - `README.md` — public onboarding
 - `docs/safety-and-responsible-use.md` — safety/privacy boundary
 - `docs/runtime-notes.md` — Hermes cron/runtime behavior
+- `docs/compact-report-format.md` — compact Telegram/mobile reporting format
 - `knowledge/data-sources.md` — data source strategy
 - `knowledge/bet-types.md` — market status logic
 - `workflows/parse-slip.md` — parse workflow

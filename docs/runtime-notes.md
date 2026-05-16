@@ -44,9 +44,26 @@ When score/status data is missing, stale, ambiguous, or conflicting:
 - mark the leg `UNVERIFIABLE`
 - cite what was checked
 - do not guess scores
+- try normalized team aliases plus competition/date search before giving up
+- try TheSportsDB, readable SofaScore/public pages, ESPN/BBC-style match centres, official pages, and fallback search where appropriate
 - do not infer final results from kickoff time alone
 - ask for clarification when team names or kickoff dates do not uniquely identify the match
-- tell the user what would be needed to verify the leg
+- keep the source mismatch/failure note brief and avoid repeating the same caveat per leg
+
+
+## Terminal-state rules
+
+`UNVERIFIABLE`, `DATA_UNAVAILABLE`, and `UNKNOWN` are **non-terminal**. They mean the current check could not verify the leg, not that the tracker is finished. Continue scheduled tracking until one of these happens:
+
+- all legs are final/settled (`WON`, `LOST`, `DEAD`, `VOID`, or otherwise explicitly settled),
+- the bounded max-check/repeat count is reached, or
+- the user stops the tracker.
+
+Never say `TRACKING COMPLETE` only because public lookup failed, a source was blocked, or all legs were unverifiable on a check. In those cases, include `Next check` and retry later.
+
+## Telegram report rendering
+
+Recurring scheduled updates should be sent as a single compact fenced `text` codeblock. Preserve source lines and the `Next check` line inside the block. Keep lines short enough for mobile scanning and avoid long paragraphs outside the block.
 
 ## Delivery notes
 

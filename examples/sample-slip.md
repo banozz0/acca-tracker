@@ -18,53 +18,215 @@ Privacy: tracking jobs may store these match details until stopped or expired.
 Start read-only tracking for this slip? Reply yes to create the job, or edit any leg first.
 ```
 
-## Example report: mixed live/pending/finished
+## Example report: compact live update
 
 ```text
-🏟️ Acca status — 22:15 CET
+⚽️ Acca update -- 22:15 CET
+Overall: 🟡 LIVE / PARTIAL
+Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
 
-Overall: ALIVE
-
-1. Arsenal vs PSG — FT 2-1 — Arsenal win — WON
+1) Arsenal vs PSG
+   Market: Arsenal win
+   Score: FT 2-1
+   Status: ✅ WON
    Source: Example official match centre
-   Confidence: high
-   Note: Final score satisfies the leg.
 
-2. Bayern vs Inter — 1-1, HT — BTTS yes — WINNING
+2) Bayern vs Inter
+   Market: BTTS Yes
+   Score: 1-1 HT
+   Status: 🟢 WINNING
    Source: Example live-score source
-   Confidence: medium
-   Note: Both teams have scored; final confirmation still pending.
+   Next: final confirmation
 
-3. Luton vs Northampton — not started — Under 2.5 goals — PENDING
+3) Luton vs Northampton
+   Market: Under 2.5 goals
+   Score: not started
+   Status: ⏳ PENDING
    Source: Example league fixture page
-   Confidence: medium
-   Note: Kickoff is later; no score yet.
+   Next: awaiting kickoff
 
-Summary: 1 won / 1 winning / 1 pending / 0 lost / 0 dead / 0 void / 0 unverifiable.
-Next: next scheduled check if tracking is active.
-Boundary: status tracking only; not betting or cash-out advice.
+Next check: 22:30 CET
+Boundary: status only, no betting/cash-out advice.
 ```
 
-## Example report: lost leg
+## Regression: all legs unverifiable on first check continues
 
 ```text
-Overall: DEAD
+⚽️ Acca update -- 16:30 GMT
+Overall: ❔ UNVERIFIABLE
+Progress: 0✅ 0🟢 0⏳ 0❌ 3❔
 
-1. Bayern vs Inter — FT 0-0 — BTTS yes — LOST
+1) Arsenal vs PSG
+   Market: Arsenal win
+   Score: unavailable
+   Status: ❔ UNVERIFIABLE
+   Source: TheSportsDB/SofaScore/ESPN checked; no clear match
+   Next: retry 16:45
+
+2) Bayern vs Inter
+   Market: BTTS Yes
+   Score: unavailable
+   Status: ❔ UNVERIFIABLE
+   Source: BBC/SofaScore/search checked; ambiguous date
+   Next: retry 16:45
+
+3) Luton vs Northampton
+   Market: Under 2.5 goals
+   Score: unavailable
+   Status: ❔ UNVERIFIABLE
+   Source: league page/search checked; unreadable result
+   Next: retry 16:45
+
+Next check: 16:45 GMT
+Boundary: status only, no betting/cash-out advice.
+```
+
+Rule asserted: this report does **not** include `TRACKING COMPLETE`; unverifiable lookup is non-terminal.
+
+## Regression: one leg lost makes acca dead
+
+```text
+⚽️ Acca update -- 18:00 GMT
+Overall: ❌ DEAD
+Progress: 0✅ 0🟢 1⏳ 1❌ 0❔
+
+1) Bayern vs Inter
+   Market: BTTS Yes
+   Score: FT 0-0
+   Status: ❌ LOST
    Source: Example official match centre
-   Confidence: high
-   Note: Both teams did not score, so this leg failed.
 
-Summary: acca is dead because at least one leg lost. Remaining legs can still be reported for status only.
+2) Luton vs Northampton
+   Market: Under 2.5 goals
+   Score: not started
+   Status: ⏳ PENDING
+   Source: Example league fixture page
+   Next: status only
+
+Next check: 18:15 GMT
+Boundary: status only, no betting/cash-out advice.
 ```
 
-## Example report: unavailable data
+## Regression: user asks why no score
 
 ```text
-Overall: UNVERIFIABLE
+I couldn't verify a score because the public sources checked were unavailable, unreadable, or did not clearly match the teams/date/competition. I won't guess a score. I'll keep the leg as UNVERIFIABLE and retry on the next scheduled check unless you stop tracking or provide clearer match details.
+```
 
-1. Town FC vs United FC — score unavailable — Match result: Town FC win — UNVERIFIABLE
-   Source: checked public search results; no reliable matching fixture found
-   Confidence: unverifiable
-   Note: Team names are ambiguous and the kickoff date is missing. Ask the user to confirm league/date or provide a clearer slip.
+Recurring Telegram updates should be sent as the fenced `text` block itself, not as a loose paragraph. This keeps columns/indentation stable on mobile.
+
+## Regression: live Bundesliga-style fixture lookup
+
+```text
+⚽️ Acca update -- 15:45 CET
+Overall: 🟡 LIVE
+Progress: 0✅ 1🟢 0⏳ 0❌ 0❔
+
+1) Bayern Munich vs Dortmund
+   Market: Over 2.5 goals
+   Score: 2-1 68'
+   Status: 🟢 WINNING
+   Source: TheSportsDB + public match centre matched
+   Next: final confirmation
+
+Next check: 16:00 CET
+Boundary: status only, no betting/cash-out advice.
+```
+
+Rule asserted: top-flight public fixtures should try TheSportsDB, SofaScore/search, ESPN/BBC-style sources, and official pages before `UNVERIFIABLE`.
+
+## Regression: live Premier League-style fixture lookup
+
+```text
+⚽️ Acca update -- 16:10 GMT
+Overall: 🟡 LIVE
+Progress: 0✅ 1🟢 1⏳ 0❌ 0❔
+
+1) Man United vs Chelsea
+   Market: BTTS Yes
+   Score: 1-1 HT
+   Status: 🟢 WINNING
+   Source: BBC Sport match page matched aliases/date
+   Next: final confirmation
+
+2) Liverpool vs Everton
+   Market: Liverpool win
+   Score: not started
+   Status: ⏳ PENDING
+   Source: official fixture page
+   Next: kickoff 17:30
+
+Next check: 16:25 GMT
+Boundary: status only, no betting/cash-out advice.
+```
+
+Rule asserted: aliases such as `Man United` / `Manchester United` can be searched, while the original slip wording remains visible.
+
+## Regression: mixed live/final legs
+
+```text
+⚽️ Acca update -- 19:30 GMT
+Overall: 🟡 PARTIAL
+Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
+
+1) Arsenal vs PSG
+   Market: Arsenal win
+   Score: FT 2-1
+   Status: ✅ WON
+   Source: official match centre
+
+2) Bayern vs Inter
+   Market: BTTS Yes
+   Score: 1-1 52'
+   Status: 🟢 WINNING
+   Source: ESPN match centre
+   Next: final confirmation
+
+3) Luton vs Northampton
+   Market: Under 2.5 goals
+   Score: not started
+   Status: ⏳ PENDING
+   Source: competition fixture page
+   Next: kickoff 20:00
+
+Next check: 19:45 GMT
+Boundary: status only, no betting/cash-out advice.
+```
+
+## Regression: ambiguous team names
+
+```text
+⚽️ Acca update -- 14:00 GMT
+Overall: ❔ UNVERIFIABLE
+Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
+
+1) Rangers vs United
+   Market: Rangers win
+   Score: unavailable
+   Status: ❔ UNVERIFIABLE
+   Source: TheSportsDB/SofaScore/search checked
+   Next: retry 14:15
+
+Note: multiple teams matched; need league/date confirmation.
+Next check: 14:15 GMT
+Boundary: status only, no betting/cash-out advice.
+```
+
+## Regression: unsupported market type
+
+```text
+⚽️ Acca update -- 14:00 GMT
+Overall: ❔ UNVERIFIABLE
+Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
+
+1) Arsenal vs Chelsea
+   Market: Player shots on target
+   Score: live score found; prop data unavailable
+   Status: ❔ UNVERIFIABLE
+   Source: BBC/SofaScore public score checked
+   Next: retry 14:15
+
+Note: market needs player-prop data not in basic public scores.
+Next check: 14:15 GMT
+Boundary: status only, no betting/cash-out advice.
 ```
