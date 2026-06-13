@@ -1,13 +1,13 @@
 ---
 name: acca-tracker
-description: Read-only football accumulator/parlay tracking assistant for Hermes. Parses a slip, confirms legs, optionally creates a tracking job, and reports whether each leg is alive, dead, won, pending, void, or unverifiable without giving betting advice.
-version: 2.0.2
+description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
+version: 2.1.0
 author: Hermes Agent community
 license: MIT
-tags: [football, sports, accumulator, parlay, live-scores, bet-tracking]
+platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [sports, tracking, football]
+    tags: [sports, football, accumulator, parlay, live-scores, bet-tracking]
     requires_toolsets: [web, vision, cronjob]
 ---
 
@@ -23,6 +23,7 @@ Acca Tracker must not become gambling advice, prediction, or betting automation.
 - Do **not** predict outcomes, imply guaranteed wins, or use “sure win” / “lock” framing.
 - Do **not** encourage chasing losses, increasing stakes, or compulsive checking.
 - Do **not** log in to bookmaker accounts, place bets, scrape private accounts, bypass anti-bot systems, or automate bookmaker actions.
+- If the user says or implies they are under legal gambling age, or that gambling is illegal for them/their location, do not help track betting activity. Offer general responsible-use/support guidance instead.
 - Remind users to follow local law, legal-age rules, and their own gambling limits.
 - Encourage users to stop tracking if updates feel stressful or compulsive.
 - Ask users to redact account IDs, QR/barcodes, ticket numbers, names, balances, and payment details from slip screenshots.
@@ -77,7 +78,7 @@ See `knowledge/bet-types.md` for status logic and edge cases.
 5. Each run checks score/status using cited sources.
 6. Report each leg as won, winning, pending, lost, dead, void, or unverifiable. Treat unverifiable/data-unavailable states as retryable, not terminal.
 7. Explain what happens next: next check time, expiry/repeat limit, and how to stop.
-8. Stop tracking only when every leg is final/settled, when repeat count expires, or when the user asks to stop. Lookup failure alone must not complete tracking.
+8. Stop tracking only when every leg is final/settled, when Hermes explicitly says the max-repeat run has been reached, or when the user asks to stop. Lookup failure alone must not complete tracking.
 
 ## Parse a slip
 
@@ -92,7 +93,7 @@ For each leg return:
 - Market/bet type using the exact slip wording
 - Decimal odds if visible
 
-Also extract visible total odds, stake, potential return, and bookmaker name if present.
+Only extract stake, potential return, total odds, or bookmaker name if the user explicitly asks or if needed for a one-time preview. Do not include those fields in scheduled tracking prompts unless the user explicitly requests it.
 Do not extract or repeat account IDs, QR/barcodes, ticket numbers, names, balances, payment details, or personal information.
 If any field is unclear, mark it unclear instead of guessing.
 If team names are ambiguous, list the ambiguity and ask the user to confirm before tracking.
@@ -126,20 +127,53 @@ Use the Hermes `cronjob` tool only after confirmation:
 ```yaml
 action: create
 name: acca-tracker-<short-id>
-schedule: "*/15 * * * *"
-repeat: 48
+schedule: "*/15 20-23 * * *"   # poll only during the match-night window
+repeat: 48                      # = firings-per-window × number of match nights
 deliver: origin
 enabled_toolsets: [web]
 prompt: <self-contained tracking prompt>
 ```
 
-Scheduling guidance:
+Scheduling guidance — window the cron to the actual match times; do not poll 24/7. Hermes accepts full cron expressions and `repeat` counts firings, so:
 
-- Single match day: every 15 minutes, about 48 repeats.
-- Multi-day slip: every 15 minutes with a bounded repeat count covering the final match window.
-- Avoid excessive frequency; this is not a real-time alert system.
+- Derive the kickoff dates/times from the parsed slip first.
+- Restrict the **hours** to the match window: for a 21:00 kickoff use `20-23` (covers lead-in + 90 min + halftime + stoppage + settlement). Widen only if kickoffs span more hours.
+- Multi-day slip with games clustered at the same time: one windowed job is enough — `*/15 20-23 * * *` stays silent through the 20+ hour gaps between match nights automatically.
+- If the exact match dates are known, target them: `*/15 20-23 13,15,18 6 *` fires only those evenings (June 13/15/18) and skips non-match days entirely.
+- Size `repeat` to cover through the **last** match night: `firings_per_window × match_nights` plus a small buffer (a 4-hour window ≈ 16 firings/night, so 3 nights ≈ 48).
+- If kickoff times differ a lot across days, widen the window or create one job per match-night cluster (each auto-expires when its repeat budget ends).
+- Never emit `*/15 * * * *` for a multi-day slip — it polls dead hours and burns the repeat budget before later games start.
 - Include enough slip detail in the cron prompt for the job to run without chat history.
 - If structured API checks require terminal/code execution and that toolset is available, include it explicitly; otherwise use web-only source checks.
+
+### Varied kickoff times across dates
+
+When a slip's legs span multiple dates with kickoffs at different hours (common for World Cup / multi-competition slips), do not force one tight window and do not poll 24/7. Group the legs by date and create **one windowed cron job per match date**:
+
+1. Group the confirmed legs by kickoff date.
+2. For each date, take that date's earliest and latest kickoff hour. The window runs from the earliest kickoff hour to the latest kickoff hour + ~3 (covers 90 min + halftime + stoppage + settlement).
+3. Emit `*/15 <hours> <day> <month> *`, date-targeted so it fires only on that date. Skip dates with no legs entirely — no job, no checks.
+4. Spillover: a 22:00+ kickoff finishes after midnight, so also fire the early hours of the next day (add `0,1` on the following date) to confirm the final whistle, or accept that the leg settles on the next date's job. State which you chose.
+5. Size each job's `repeat` to its own window (~4 firings/hour × window hours) plus a small buffer.
+6. Name jobs distinctly per date, e.g. `acca-tracker-<short-id>-<MMDD>`, so the stop-tracking flow can list and remove them all (`acca-tracker-*`).
+7. **Every per-date job's prompt must contain the full confirmed slip (all legs), not just that date's legs.** Each run needs the whole slip to compute the overall acca status across all legs and to confirm a prior night's late game that finishes after midnight (spillover). The kickoff-time efficiency rule still applies: report not-yet-started legs as PENDING without querying them.
+
+Example — a slip with games on 14, 15 (04:00/18:00/21:00), 16, 18, 20, 23 June:
+
+| Date | Cron | Notes |
+| --- | --- | --- |
+| 14 Jun | `*/15 22,23 14 6 *` | + `*/15 0,1 15 6 *` to confirm the post-midnight final |
+| 15 Jun | `*/15 4,5,6,18-23 15 6 *` | early + evening kickoffs same day |
+| 16 Jun | `*/15 21,22,23 16 6 *` | |
+| 18 Jun | `*/15 19-23 18 6 *` | |
+| 20 Jun | `*/15 19-23 20 6 *` | |
+| 23 Jun | `*/15 19-23 23 6 *` | |
+
+Dates with no legs (e.g. 19, 21, 22 June) get no job and zero checks.
+
+Simpler single-job alternative (more wasted runs): one union schedule across all match dates, e.g. `*/15 0,3-6,18-23 14,15,16,17,18,20,23 6 *`. Prefer per-date jobs when minimizing scheduled runs matters.
+
+**Timezone:** the cron hours, the slip's printed kickoff times, and the Hermes scheduler must share one timezone. Confirm the slip's timezone with the user (or normalize to the scheduler's timezone) before emitting the schedule — a mismatch shifts every window and can miss kickoffs. State the timezone used in the confirmation preview.
 
 ## Tracking prompt template
 
@@ -151,9 +185,10 @@ BOUNDARIES:
 - Do not suggest new bets, increased stakes, chasing losses, or bookmaker actions.
 - Never guess scores. If data is unavailable or conflicting, say so.
 - Do not repeat private ticket/account identifiers.
+- If the interaction reveals the user is underage or gambling is illegal for them, stop status tracking and advise them not to use betting-tracking assistance.
 
 SLIP DETAILS:
-<paste confirmed legs with teams, date/time, market, odds if available, and settlement notes>
+<paste confirmed legs with teams, competition/date/time, market wording, and settlement notes. Do not include stake, return, ticket/account identifiers, balances, QR/barcodes, or payment details. Omit odds unless the user explicitly requested them for display.>
 
 TASK:
 1. Normalize team names before searching: remove FC/AFC/CF/SC suffix noise, expand common abbreviations only when obvious, preserve original names in the report, and keep aliases paired with competition/date.
@@ -163,12 +198,12 @@ TASK:
    - "<home> <away> SofaScore <date>"
    - "<home> <away> ESPN BBC <competition>"
    - "<competition/team official> <home> <away> match centre"
-3. Check reliable public score/status sources in this conservative ladder:
-   a. TheSportsDB eventsday/search where team/date coverage exists.
-   b. SofaScore public pages/search-result text only when readable and clearly matched; do not call it an official public API.
-   c. ESPN, BBC Sport, Sky/TNT/Guardian, or equivalent reputable match centres.
+3. Check reliable public score/status sources in this ladder:
+   a. ESPN scoreboard API (primary): https://site.api.espn.com/apis/site/v2/sports/soccer/{league}/scoreboard?dates=YYYYMMDD (or /all/ for every competition). Read status.type.state (pre/in/post), status.type.description, status.displayClock (live minute), and competitors[].score. This is the main source for live in-play status.
+   b. TheSportsDB eventsday (https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=YYYY-MM-DD&s=Soccer) as a secondary structured cross-check for final scores; its free tier has no live endpoint and capped coverage.
+   c. ESPN/BBC/Sky/TNT/Guardian reputable match-centre web pages when the API is missing a fixture.
    d. Official competition/team pages.
-   e. General web search snippets as context only, not sole proof when unclear.
+   e. SofaScore or general web-search snippets as context only (SofaScore direct fetch is usually bot-blocked); not sole proof when unclear.
 4. Match by both teams, competition/league, date/kickoff window, and home/away orientation when relevant. If a source matches only one team or a different date/competition, keep searching.
 5. Cite the source name or URL used for each leg; for failures, cite the compact source group checked.
 6. Determine match status: not started, live, HT, FT, postponed, abandoned, cancelled, or unavailable.
@@ -177,14 +212,18 @@ TASK:
 9. If team matching is ambiguous, mark the leg UNVERIFIABLE and explain the ambiguity in one short phrase.
 10. If data is missing, stale, or conflicting after the source ladder, label the leg UNVERIFIABLE and briefly state the mismatch/failure. UNVERIFIABLE, DATA_UNAVAILABLE, and UNKNOWN are non-terminal states.
 11. If one leg is lost/dead, mark the overall acca DEAD, but continue reporting other legs as status information only.
-12. Include TRACKING COMPLETE only when every leg is terminal/settled: WON, LOST, DEAD, VOID, final-settled, cancelled/postponed with explicit settlement note, or the bounded repeat count has expired. Never complete tracking just because lookup failed.
+12. Include TRACKING COMPLETE only when every leg is terminal/settled, or when the scheduler/runtime explicitly says this is the final/max-repeat run. Never complete tracking because lookup failed, sources were blocked, all legs were unverifiable, or you merely believe the repeat window should be over.
+
+EFFICIENCY (multi-day slips):
+- Each run, compare every leg's kickoff to the current time. Legs whose kickoff is still in the future have not started — report them PENDING without searching for a score. Only fetch legs that are in-play or already finished.
+- This avoids pointless lookups for later match nights while the current night's games are live.
 
 REPORT FORMAT (compact Telegram/mobile):
 Return recurring tracker updates as one compact fenced text block. Put only the codeblock in the scheduled update unless a safety refusal is needed outside it.
 
 ```text
 ⚽️ Acca update -- <HH:MM timezone>
-Overall: <emoji> <LIVE / PARTIAL / DEAD / WON / PENDING / UNVERIFIABLE>
+Overall: <emoji> <WON|LIVE|PARTIAL|PENDING|DEAD|UNVERIFIABLE>
 Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
 
 1) <Match>
@@ -203,7 +242,10 @@ Boundary: status only, no betting/cash-out advice.
 Formatting rules:
 - Keep each leg to at most 4-5 short lines.
 - Put caveats once at the bottom, not repeated in every leg.
-- Use sparse clear emojis: ✅ won, 🟢 currently winning/live, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
+- Leg-status emojis: ✅ won, 🟢 currently winning/live, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
+- Overall-status emojis: ✅ WON, 🟢 LIVE, 🟡 PARTIAL, ⏳ PENDING, ❌ DEAD, ❔ UNVERIFIABLE.
+- Progress counters use leg-status emojis ✅ 🟢 ⏳ ❌ ❔ (LOST and DEAD both count under ❌). Append a `<count>⚪` only when at least one leg is VOID.
+- Many-leg slips (5+ legs): keep the `Overall` + `Progress` header covering **all** legs, but give full per-leg detail only for legs that are **live or settled in the current window**. Roll already-settled and not-yet-started legs into the Progress counts instead of listing them in full every run, and add a short `Next up` / `N legs still to play` line. See `docs/compact-report-format.md`.
 - Include a source/citation for each leg.
 - Include Next check when continuing and make the next retry time explicit.
 - Keep most lines under ~72 characters for mobile scanning.
@@ -245,8 +287,8 @@ Principles:
 - Cite sources in reports.
 - Use `UNVERIFIABLE` instead of guessing.
 - Treat low-tier leagues, ambiguous team names, and exotic markets as lower confidence.
-- Source priority: TheSportsDB/public structured data when available; SofaScore public page/search result when readable and clearly matched; ESPN/BBC/Sky/TNT/Guardian; official league/team pages; fallback search; then `UNVERIFIABLE` and continue tracking.
-- SofaScore may be used as a normal public-source fallback via web search/extract against public pages or search results. Do not describe it as an official public API. If blocked, unreadable, or ambiguous, mark the source unavailable and continue.
+- Source priority: ESPN scoreboard API (live in-play + final scores) first; TheSportsDB eventsday as a secondary structured cross-check for final scores (free tier has no live endpoint); ESPN/BBC/Sky/TNT/Guardian match-centre pages; official league/team pages; then web-search snippets and `UNVERIFIABLE` while continuing to track.
+- SofaScore direct fetches are usually bot-blocked (HTTP 403); use SofaScore only via web-search snippets, never as a primary fetch target, and never describe it as an official public API. If a source is blocked, unreadable, or ambiguous, mark it unavailable and continue.
 - Do not stop after one failed source. Retry with normalized team names, aliases, competition/date terms, and official-source phrasing before marking a legitimate public fixture `UNVERIFIABLE`.
 
 ## Cash-out and payout handling
@@ -281,3 +323,4 @@ Do not estimate or recommend cash-out decisions. If the user asks, explain that 
 - `workflows/start-tracking.md` — tracking job workflow
 - `workflows/stop-tracking.md` — stop workflow
 - `examples/sample-slip.md` — example parsed slip and report
+- `references/profile-install-and-hardening.md` — profile-safe install, hardening checklist, and validation probe

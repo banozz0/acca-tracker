@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.0.2
+Version: 2.1.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
@@ -30,16 +30,42 @@ It helps a Hermes agent parse a football betting slip, confirm the legs with the
 
 ## Install
 
-Copy this folder into a Hermes skills directory, for example:
+Copy the entire skill directory, not just `SKILL.md`; the skill references `docs/`, `knowledge/`, `workflows/`, `templates/`, and `examples/`.
+
+For Harry's active profile, install into the profile-local skills tree:
 
 ```bash
-mkdir -p ~/.hermes/skills
-cp -R acca-tracker ~/.hermes/skills/acca-tracker
+# Run from the skill's source directory (a clone or download of acca-tracker).
+PROFILE=harry   # change to your Hermes profile name
+mkdir -p ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker
+rsync -a --delete --exclude '.git' ./ \
+  ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker/
 ```
 
-Or install it into any profile-local Hermes skills directory managed by your Hermes setup.
+Avoid installing into `~/.hermes/skills` unless you intentionally want the default/shared profile skill location.
 
-Then start a fresh Hermes session and load/use the skill by name.
+Then start a fresh Hermes session and load/use the skill by name; skill loading is session-cached.
+
+## Verify after install
+
+```bash
+test -f ~/.hermes/profiles/harry/skills/acca-tracker/SKILL.md
+python3 - <<'PY'
+from pathlib import Path
+import re
+p = Path.home()/'.hermes/profiles/harry/skills/acca-tracker/SKILL.md'
+s = p.read_text()
+assert s.startswith('---')
+m = re.search(r'\n---\s*\n', s[3:])
+assert m
+frontmatter = s[3:m.start()+3]
+assert 'name: acca-tracker' in frontmatter
+assert 'description:' in frontmatter
+assert s[m.end()+3:].strip()
+print('OK', p)
+PY
+hermes --profile harry tools list
+```
 
 ## Required Hermes capabilities
 

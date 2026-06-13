@@ -16,16 +16,23 @@ Tell the user what happens next:
 
 ## Suggested cron settings
 
+Window the schedule to the match times instead of polling 24/7. Hermes accepts full cron expressions and `repeat` counts firings.
+
 ```yaml
 action: create
 name: acca-tracker-<short-id>
-schedule: "*/15 * * * *"
-repeat: 48
+schedule: "*/15 20-23 * * *"   # match-night window only; 21:00 kickoffs
+repeat: 48                      # firings-per-window × number of match nights
 deliver: origin
 enabled_toolsets: [web]
 ```
 
-Use bounded repeat counts. Avoid excessive polling; this is not a real-time goal-alert system. Add other toolsets only when the running Hermes environment supports them and the job genuinely needs them.
+- Restrict hours to the kickoff window (`20-23` for a 21:00 KO). The job then stays silent through the long gaps between match nights.
+- If exact match dates are known, target them: `*/15 20-23 13,15,18 6 *` fires only those evenings.
+- Size `repeat` to reach the last match night (~16 firings per 4-hour window per night).
+- Never use `*/15 * * * *` for a multi-day slip: it polls dead hours and exhausts the repeat budget before later games start.
+- When kickoff times vary a lot across dates, create one windowed job per match date (`acca-tracker-<short-id>-<MMDD>`) instead of one schedule; handle post-midnight finals by adding the next day's early hours, and keep cron hours, slip times, and the scheduler in one timezone. See "Varied kickoff times across dates" in SKILL.md.
+- Add other toolsets only when the running Hermes environment supports them and the job genuinely needs them.
 
 ## Stopping a tracker
 
@@ -56,10 +63,10 @@ When score/status data is missing, stale, ambiguous, or conflicting:
 `UNVERIFIABLE`, `DATA_UNAVAILABLE`, and `UNKNOWN` are **non-terminal**. They mean the current check could not verify the leg, not that the tracker is finished. Continue scheduled tracking until one of these happens:
 
 - all legs are final/settled (`WON`, `LOST`, `DEAD`, `VOID`, or otherwise explicitly settled),
-- the bounded max-check/repeat count is reached, or
+- Hermes explicitly says the bounded max-check/repeat count is reached, or
 - the user stops the tracker.
 
-Never say `TRACKING COMPLETE` only because public lookup failed, a source was blocked, or all legs were unverifiable on a check. In those cases, include `Next check` and retry later.
+Never say `TRACKING COMPLETE` only because public lookup failed, a source was blocked, all legs were unverifiable on a check, or wall-clock time suggests the repeat window should be over. In those cases, include `Next check` and retry later.
 
 ## Telegram report rendering
 

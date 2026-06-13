@@ -22,7 +22,7 @@ Start read-only tracking for this slip? Reply yes to create the job, or edit any
 
 ```text
 ⚽️ Acca update -- 22:15 CET
-Overall: 🟡 LIVE / PARTIAL
+Overall: 🟡 PARTIAL
 Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
 
 1) Arsenal vs PSG
@@ -119,7 +119,7 @@ Recurring Telegram updates should be sent as the fenced `text` block itself, not
 
 ```text
 ⚽️ Acca update -- 15:45 CET
-Overall: 🟡 LIVE
+Overall: 🟢 LIVE
 Progress: 0✅ 1🟢 0⏳ 0❌ 0❔
 
 1) Bayern Munich vs Dortmund
@@ -139,7 +139,7 @@ Rule asserted: top-flight public fixtures should try TheSportsDB, SofaScore/sear
 
 ```text
 ⚽️ Acca update -- 16:10 GMT
-Overall: 🟡 LIVE
+Overall: 🟢 LIVE
 Progress: 0✅ 1🟢 1⏳ 0❌ 0❔
 
 1) Man United vs Chelsea
@@ -211,6 +211,38 @@ Note: multiple teams matched; need league/date confirmation.
 Next check: 14:15 GMT
 Boundary: status only, no betting/cash-out advice.
 ```
+
+## Regression: void leg counts under ⚪
+
+```text
+⚽️ Acca update -- 21:00 GMT
+Overall: 🟡 PARTIAL
+Progress: 1✅ 0🟢 1⏳ 0❌ 0❔ 1⚪
+
+1) Arsenal vs PSG
+   Market: Draw no bet: Arsenal
+   Score: FT 1-1
+   Status: ⚪ VOID
+   Source: official match centre
+
+2) Bayern vs Inter
+   Market: BTTS Yes
+   Score: FT 2-1
+   Status: ✅ WON
+   Source: ESPN match centre
+
+3) Luton vs Northampton
+   Market: Under 2.5 goals
+   Score: not started
+   Status: ⏳ PENDING
+   Source: competition fixture page
+   Next: kickoff 20:00
+
+Next check: 21:15 GMT
+Boundary: status only, no betting/cash-out advice.
+```
+
+Rule asserted: a VOID leg appends `1⚪` to the Progress line, and a void (not lost) leg keeps the acca PARTIAL rather than DEAD.
 
 ## Regression: unsupported market type
 

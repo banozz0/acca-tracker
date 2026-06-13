@@ -68,8 +68,10 @@ Use `UNVERIFIABLE` unless reliable source data is available.
 ### Total goals over/under
 
 - Half-goal lines: final total over/under line determines `WON` or `LOST`.
+- Live over bets that already exceed the line can be `WINNING`/effectively satisfied, pending final/settlement confirmation.
+- Live under bets become `DEAD` once the current total exceeds the line.
 - Whole-goal lines: exact total may be `VOID`/push depending on bookmaker rule.
-- Live overs that already exceed the line can be `WINNING`; unders remain vulnerable until final.
+- If abandonment, void, Asian total, or bookmaker-specific settlement rules matter and are unclear, mark `UNVERIFIABLE`.
 
 ### Handicap
 
@@ -78,12 +80,13 @@ Use `UNVERIFIABLE` unless reliable source data is available.
 
 ## Overall acca status
 
-- `WON` — every settled leg won and any void legs are accounted for.
-- `ALIVE` — no leg is lost/dead, and at least one live leg is winning or pending.
-- `PENDING` — no leg is lost/dead, but matches have not started or data is incomplete.
+- `WON` — every non-void settled leg won and all legs are terminal/settled.
+- `LIVE` — no leg is lost/dead, and at least one live leg is currently satisfying its market.
+- `PARTIAL` — at least one leg is settled/won/void and at least one remaining leg is pending/live/unverifiable, with no lost/dead leg.
+- `PENDING` — no leg is lost/dead, and all unresolved legs are not started or awaiting data.
 - `DEAD` — at least one leg is lost or dead.
-- `UNVERIFIABLE` — one or more required legs cannot be verified from available public data; this does not complete tracking by itself.
+- `UNVERIFIABLE` — one or more required legs cannot be verified from available public data; this is non-terminal unless the scheduler expires or the user stops tracking.
 
 ## Reporting rule
 
-If the bet type cannot be evaluated from available public data, say so directly and mark it `UNVERIFIABLE` instead of inventing logic. Keep tracking unless all legs are final/settled, max checks are reached, or the user stops it.
+If the bet type cannot be evaluated from available public data, say so directly and mark it `UNVERIFIABLE` instead of inventing logic. Keep tracking unless all legs are final/settled, Hermes explicitly says the max-repeat run has been reached, or the user stops it.
