@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.1.0
+Version: 2.2.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
@@ -14,6 +14,7 @@ It helps a Hermes agent parse a football betting slip, confirm the legs with the
 - Creates optional bounded Hermes cron jobs for status checks.
 - Checks public score/status sources with a conservative retrieval ladder and cites them in reports.
 - Uses compact Telegram/mobile-friendly status updates.
+- Stays silent between events — only messages when a leg goes live, settles, or the acca's status changes (no per-interval "nothing yet" spam).
 - Sends recurring tracker updates as compact fenced `text` codeblocks for cleaner mobile scanning.
 - Reports each leg status and the overall acca status.
 - Handles missing, ambiguous, or conflicting data as non-terminal `UNVERIFIABLE` instead of guessing.

@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.1.0
+version: 2.2.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -134,6 +134,10 @@ enabled_toolsets: [web]
 prompt: <self-contained tracking prompt>
 ```
 
+**Scheduled agents are time-blind.** Hermes does not inject the current time into the job prompt, so the agent cannot tell what time it is on its own. Handle this two ways:
+- Drive leg status from the source's match state (ESPN `status.type.state`), never from the agent's clock, and bake `RUN DATE: <date>` into each job (see the varied-times section).
+- To give the report a correct header time, inject the real time each run: create `~/.hermes/scripts/now.sh` containing `date '+CURRENT TIME: %Y-%m-%d %H:%M:%S %Z'` and create the job with `--script now.sh` (its stdout is prepended to the prompt every run). The agent uses `CURRENT TIME` for the header but still lets the source decide leg status.
+
 Scheduling guidance — window the cron to the actual match times; do not poll 24/7. Hermes accepts full cron expressions and `repeat` counts firings, so:
 
 - Derive the kickoff dates/times from the parsed slip first.
@@ -156,7 +160,8 @@ When a slip's legs span multiple dates with kickoffs at different hours (common 
 4. Spillover: a 22:00+ kickoff finishes after midnight, so also fire the early hours of the next day (add `0,1` on the following date) to confirm the final whistle, or accept that the leg settles on the next date's job. State which you chose.
 5. Size each job's `repeat` to its own window (~4 firings/hour × window hours) plus a small buffer.
 6. Name jobs distinctly per date, e.g. `acca-tracker-<short-id>-<MMDD>`, so the stop-tracking flow can list and remove them all (`acca-tracker-*`).
-7. **Every per-date job's prompt must contain the full confirmed slip (all legs), not just that date's legs.** Each run needs the whole slip to compute the overall acca status across all legs and to confirm a prior night's late game that finishes after midnight (spillover). The kickoff-time efficiency rule still applies: report not-yet-started legs as PENDING without querying them.
+7. **Every per-date job's prompt must contain the full confirmed slip (all legs), not just that date's legs.** Each run needs the whole slip to compute the overall acca status across all legs and to confirm a prior night's late game that finishes after midnight (spillover).
+8. **Bake the covered date into the prompt as `RUN DATE: <YYYY-MM-DD>` and list which legs kick off that date.** The agent is otherwise time-blind, so this is how it knows which ESPN date to query. Each run it must query the ESPN scoreboard for the `RUN DATE` and report those legs from the API's match state (`pre`/`in`/`post`), never from an assumed clock. Legs on later dates stay PENDING.
 
 Example — a slip with games on 14, 15 (04:00/18:00/21:00), 16, 18, 20, 23 June:
 
@@ -214,16 +219,24 @@ TASK:
 11. If one leg is lost/dead, mark the overall acca DEAD, but continue reporting other legs as status information only.
 12. Include TRACKING COMPLETE only when every leg is terminal/settled, or when the scheduler/runtime explicitly says this is the final/max-repeat run. Never complete tracking because lookup failed, sources were blocked, all legs were unverifiable, or you merely believe the repeat window should be over.
 
-EFFICIENCY (multi-day slips):
-- Each run, compare every leg's kickoff to the current time. Legs whose kickoff is still in the future have not started — report them PENDING without searching for a score. Only fetch legs that are in-play or already finished.
-- This avoids pointless lookups for later match nights while the current night's games are live.
+TIME-AWARENESS & EFFICIENCY (critical — a scheduled run may not know the real time):
+- Do NOT decide whether a match has started from your own clock; a cron run is often time-blind. Drive status from the data source instead.
+- This job is told the single date it covers as `RUN DATE` and which legs kick off that date. On every run, query the ESPN scoreboard for the `RUN DATE` (and the previous date when this run is in the post-midnight 0–1h window). Read each match's `status.type.state` (`pre` / `in` / `post`) and let THAT — not your clock — decide not-started / live / finished.
+- Legs whose kickoff date is AFTER this job's `RUN DATE` are genuinely future: report them PENDING without querying.
+- Header time: use the injected `CURRENT TIME` line if present (see "Create a tracking job"); if no reliable current time is available, omit the absolute clock rather than inventing one.
+
+WHEN TO SEND vs STAY SILENT (do not ping when nothing is happening):
+- This runs as a scheduled cron. Suppress empty updates with the runtime's silent token — in Hermes, respond with exactly `[SILENT]` and nothing else — instead of sending a "nothing yet" message.
+- If `CURRENT TIME` is before every today-leg's kickoff, respond `[SILENT]` without querying.
+- After checking, only send a report when at least one today-leg is live (in-play) or has just settled. If nothing is live or newly settled, respond `[SILENT]`.
+- Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD).
 
 REPORT FORMAT (compact Telegram/mobile):
 Return recurring tracker updates as one compact fenced text block. Put only the codeblock in the scheduled update unless a safety refusal is needed outside it.
 
 ```text
 ⚽️ Acca update -- <HH:MM timezone>
-Overall: <emoji> <WON|LIVE|PARTIAL|PENDING|DEAD|UNVERIFIABLE>
+Overall: <emoji> <WON|LIVE|PARTIAL|PENDING|DEAD|UNVERIFIABLE> — <settled>/<total> settled, <lost> lost
 Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
 
 1) <Match>
@@ -245,7 +258,9 @@ Formatting rules:
 - Leg-status emojis: ✅ won, 🟢 currently winning/live, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
 - Overall-status emojis: ✅ WON, 🟢 LIVE, 🟡 PARTIAL, ⏳ PENDING, ❌ DEAD, ❔ UNVERIFIABLE.
 - Progress counters use leg-status emojis ✅ 🟢 ⏳ ❌ ❔ (LOST and DEAD both count under ❌). Append a `<count>⚪` only when at least one leg is VOID.
-- Many-leg slips (5+ legs): keep the `Overall` + `Progress` header covering **all** legs, but give full per-leg detail only for legs that are **live or settled in the current window**. Roll already-settled and not-yet-started legs into the Progress counts instead of listing them in full every run, and add a short `Next up` / `N legs still to play` line. See `docs/compact-report-format.md`.
+- Many-leg slips (5+ legs): keep the `Overall` + `Progress` header covering **all** legs, but print a per-leg block ONLY for legs that are live (WINNING) or settled (WON/LOST/DEAD/VOID) in the current window. **Never print a PENDING / not-started leg as its own block** — pending legs exist only as the ⏳ count. If nothing is live or settled yet (and you are sending at all), write a single line such as `No legs live or settled yet.` plus a `Next up:` line instead of any leg blocks. See `docs/compact-report-format.md`.
+- Output only the report content — never echo instruction markers (e.g. `‼️`), prompt headings, or meta-notes into the message.
+- A leg that is live but level/behind is still `🟢 LIVE` overall (the leg is `PENDING`); do not downgrade the overall to `PARTIAL` just because a live leg is not yet winning.
 - Include a source/citation for each leg.
 - Include Next check when continuing and make the next retry time explicit.
 - Keep most lines under ~72 characters for mobile scanning.

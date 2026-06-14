@@ -57,17 +57,19 @@ Rules:
 
 A big accumulator (5+ legs, often across several dates) must not print every leg in full every 15 minutes — that is an unreadable wall of "not started" on mobile. Instead:
 
+- **Stay silent when nothing is happening.** Before any leg is live, and on any run where nothing is live or newly settled, respond with the runtime's silent token (`[SILENT]` in Hermes) instead of sending a "nothing yet" update. Otherwise the job spams a message every interval.
 - Keep the `Overall` + `Progress` header covering **all** legs, so the whole-acca standing is always visible.
-- Give full per-leg detail only for legs that are **live now** or **settled during the current window**.
-- Roll already-settled and not-yet-started legs into the `Progress` counts — do not repeat them in full.
+- Print a per-leg block **only** for legs that are live (WINNING) or settled (WON/LOST/DEAD/VOID). **Never print a PENDING / not-started leg as its own block** — they exist only as the ⏳ count.
+- If you are sending but no leg is live or settled yet, use a single line such as `No legs live or settled yet.` plus a `Next up:` line — no leg blocks.
 - Add a short `Next up` line and an `N legs still to play` count so upcoming legs are acknowledged without detail.
+- Output only the report itself — never echo instruction markers (`‼️`), prompt headings, or meta-notes.
 - This requires the job prompt to hold the **full slip** (all legs), so the header counts and any post-midnight confirmations are correct.
 
 Example — a 13-leg World Cup slip, update on 15 June at 18:30 (4 legs already settled, one live, the rest upcoming):
 
 ```text
 ⚽️ Acca update -- 18:30 CEST
-Overall: 🟢 ALIVE — 4/13 settled, 0 lost
+Overall: 🟡 PARTIAL — 4/13 settled, 0 lost
 Progress: 4✅ 1🟢 8⏳ 0❌ 0❔
 
 Live now:

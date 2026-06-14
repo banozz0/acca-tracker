@@ -68,6 +68,19 @@ When score/status data is missing, stale, ambiguous, or conflicting:
 
 Never say `TRACKING COMPLETE` only because public lookup failed, a source was blocked, all legs were unverifiable on a check, or wall-clock time suggests the repeat window should be over. In those cases, include `Next check` and retry later.
 
+## Time awareness (scheduled runs are time-blind)
+
+Hermes does not inject the current time into a cron agent's prompt — the agent cannot tell what time it is unless you give it to it. If a tracking prompt asks the agent to decide "future vs started" from its own clock, it will hallucinate a timestamp and skip every leg as "future, not searched," so the tracker never actually checks scores.
+
+Avoid this two ways:
+
+- **Status from the source, not the clock.** Bake `RUN DATE: <YYYY-MM-DD>` into each per-date job and have it query the ESPN scoreboard for that date every run; the API's `status.type.state` (`pre`/`in`/`post`) decides not-started/live/finished. Legs on later dates stay PENDING.
+- **Real time for the header.** Attach a tiny script that prints the current time and is injected into the prompt each run: `~/.hermes/scripts/now.sh` → `date '+CURRENT TIME: %Y-%m-%d %H:%M:%S %Z'`, created with `--script now.sh`.
+
+## Silent runs (don't ping when nothing is happening)
+
+A windowed job still fires on schedule even when no leg is live yet. Use the runtime's silent token (`[SILENT]` in Hermes — respond with exactly that and nothing else) to suppress delivery, otherwise the user gets a "nothing yet" message every interval. Send a real report only when at least one leg is live or newly settled, or the overall status changes.
+
 ## Telegram report rendering
 
 Recurring scheduled updates should be sent as a single compact fenced `text` codeblock. Preserve source lines and the `Next check` line inside the block. Keep lines short enough for mobile scanning and avoid long paragraphs outside the block.
