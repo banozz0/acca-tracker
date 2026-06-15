@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.2.0
+version: 2.3.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -134,9 +134,11 @@ enabled_toolsets: [web]
 prompt: <self-contained tracking prompt>
 ```
 
-**Scheduled agents are time-blind.** Hermes does not inject the current time into the job prompt, so the agent cannot tell what time it is on its own. Handle this two ways:
-- Drive leg status from the source's match state (ESPN `status.type.state`), never from the agent's clock, and bake `RUN DATE: <date>` into each job (see the varied-times section).
-- To give the report a correct header time, inject the real time each run: create `~/.hermes/scripts/now.sh` containing `date '+CURRENT TIME: %Y-%m-%d %H:%M:%S %Z'` and create the job with `--script now.sh` (its stdout is prepended to the prompt every run). The agent uses `CURRENT TIME` for the header but still lets the source decide leg status.
+**Scheduled agents are time-blind and fetch unreliably.** Hermes does not inject the current time, and asking the model to fetch + parse a 50-event ESPN JSON every run is unreliable — it intermittently skips the call and hallucinates a plausible score, which surfaces as frozen or backwards clocks and vanishing legs. Fix both with a **pre-run score script** whose stdout is injected into the prompt each run:
+
+- Copy `scripts/fetch-scores.py` to `~/.hermes/scripts/acca-<id>.py`, fill in its `SLIP` (leg, teams, date, selection) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`.
+- Each run it prints a `CURRENT TIME:` line and an authoritative `LIVE SCORES:` block — real ESPN state (`NOT STARTED` / `LIVE` / `FINISHED`) and score per leg. **The agent reads those numbers; it does not fetch scores itself.** This is what keeps scores current and consistent across runs, and it lets a small/cheap model run the tracker reliably.
+- The script searches all `RUN_DATES` together because ESPN files a late-evening European kickoff under the previous US calendar date.
 
 Scheduling guidance — window the cron to the actual match times; do not poll 24/7. Hermes accepts full cron expressions and `repeat` counts firings, so:
 
@@ -196,40 +198,24 @@ SLIP DETAILS:
 <paste confirmed legs with teams, competition/date/time, market wording, and settlement notes. Do not include stake, return, ticket/account identifiers, balances, QR/barcodes, or payment details. Omit odds unless the user explicitly requested them for display.>
 
 TASK:
-1. Normalize team names before searching: remove FC/AFC/CF/SC suffix noise, expand common abbreviations only when obvious, preserve original names in the report, and keep aliases paired with competition/date.
-2. Build 3-5 targeted queries per leg before giving up:
-   - "<home> <away> live score <date> <competition>"
-   - "<home> vs <away> result <date>"
-   - "<home> <away> SofaScore <date>"
-   - "<home> <away> ESPN BBC <competition>"
-   - "<competition/team official> <home> <away> match centre"
-3. Check reliable public score/status sources in this ladder:
-   a. ESPN scoreboard API (primary): https://site.api.espn.com/apis/site/v2/sports/soccer/{league}/scoreboard?dates=YYYYMMDD (or /all/ for every competition). Read status.type.state (pre/in/post), status.type.description, status.displayClock (live minute), and competitors[].score. This is the main source for live in-play status.
-   b. TheSportsDB eventsday (https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=YYYY-MM-DD&s=Soccer) as a secondary structured cross-check for final scores; its free tier has no live endpoint and capped coverage.
-   c. ESPN/BBC/Sky/TNT/Guardian reputable match-centre web pages when the API is missing a fixture.
-   d. Official competition/team pages.
-   e. SofaScore or general web-search snippets as context only (SofaScore direct fetch is usually bot-blocked); not sole proof when unclear.
-4. Match by both teams, competition/league, date/kickoff window, and home/away orientation when relevant. If a source matches only one team or a different date/competition, keep searching.
-5. Cite the source name or URL used for each leg; for failures, cite the compact source group checked.
-6. Determine match status: not started, live, HT, FT, postponed, abandoned, cancelled, or unavailable.
-7. Determine leg status: WON, WINNING, PENDING, LOST, DEAD, VOID, or UNVERIFIABLE.
-8. Determine overall status: LIVE, PARTIAL, DEAD, WON, PENDING, or UNVERIFIABLE.
-9. If team matching is ambiguous, mark the leg UNVERIFIABLE and explain the ambiguity in one short phrase.
-10. If data is missing, stale, or conflicting after the source ladder, label the leg UNVERIFIABLE and briefly state the mismatch/failure. UNVERIFIABLE, DATA_UNAVAILABLE, and UNKNOWN are non-terminal states.
-11. If one leg is lost/dead, mark the overall acca DEAD, but continue reporting other legs as status information only.
-12. Include TRACKING COMPLETE only when every leg is terminal/settled, or when the scheduler/runtime explicitly says this is the final/max-repeat run. Never complete tracking because lookup failed, sources were blocked, all legs were unverifiable, or you merely believe the repeat window should be over.
+1. Read the injected `LIVE SCORES:` block — it gives each leg's real ESPN state (`NOT STARTED` / `LIVE` / `FINISHED`) and score. Use those numbers; do NOT fetch scores yourself.
+2. Only for a leg the script marks `NOT FOUND`, do one quick fallback check (ESPN/BBC/Sky/TNT/Guardian match centre or TheSportsDB by date, matching both teams + date). If still unresolved, mark it UNVERIFIABLE (non-terminal) and retry next run.
+3. Preserve original slip team names in the report; cite `ESPN` (or the fallback source actually used) per leg.
+4. Leg status from the injected state + score (Match Betting = selection must lead at full time): `NOT STARTED` -> PENDING; `LIVE` & selection leading -> WINNING; `LIVE` & level/behind -> PENDING; `FINISHED` & selection won -> WON; `FINISHED` & draw/opponent -> LOST. Postponed/abandoned/push -> VOID; missing/ambiguous -> UNVERIFIABLE (non-terminal).
+5. Overall status: WON / LIVE / PARTIAL / PENDING / DEAD / UNVERIFIABLE. If any leg is LOST/DEAD, overall is DEAD (keep the rest as information only). A leg that is live but not yet winning keeps the overall `LIVE`, not `PARTIAL`.
+6. Include TRACKING COMPLETE only when every leg is terminal/settled, or the scheduler says this is the final/max-repeat run. Never complete because a lookup failed or a leg was unverifiable.
 
-TIME-AWARENESS & EFFICIENCY (critical — a scheduled run may not know the real time):
-- Do NOT decide whether a match has started from your own clock; a cron run is often time-blind. Drive status from the data source instead.
-- This job is told the single date it covers as `RUN DATE` and which legs kick off that date. On every run, query the ESPN scoreboard for the `RUN DATE` (and the previous date when this run is in the post-midnight 0–1h window). Read each match's `status.type.state` (`pre` / `in` / `post`) and let THAT — not your clock — decide not-started / live / finished.
-- Legs whose kickoff date is AFTER this job's `RUN DATE` are genuinely future: report them PENDING without querying.
-- Header time: use the injected `CURRENT TIME` line if present (see "Create a tracking job"); if no reliable current time is available, omit the absolute clock rather than inventing one.
+TIME-AWARENESS & EFFICIENCY:
+- The injected `CURRENT TIME` and `LIVE SCORES` block are your source of truth — never decide match status from your own clock or invent a score. The script's per-leg state (`NOT STARTED` / `LIVE` / `FINISHED`) decides each leg's status.
+- The script only fetches this job's `RUN_DATES`; a leg shown as `future date, not checked` is genuinely upcoming — report it PENDING (it sits in the ⏳ count).
+- Header time: use the injected `CURRENT TIME`.
 
 WHEN TO SEND vs STAY SILENT (do not ping when nothing is happening):
 - This runs as a scheduled cron. Suppress empty updates with the runtime's silent token — in Hermes, respond with exactly `[SILENT]` and nothing else — instead of sending a "nothing yet" message.
 - If `CURRENT TIME` is before every today-leg's kickoff, respond `[SILENT]` without querying.
 - After checking, only send a report when at least one today-leg is live (in-play) or has just settled. If nothing is live or newly settled, respond `[SILENT]`.
 - Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD).
+- Once the overall acca is DEAD, stop live-progress spam: respond `[SILENT]` on runs that only show remaining legs still in play. Send only when a remaining leg reaches its FINAL result (a brief settled-tally update) — the user already got the death notice on the run the killing leg settled.
 
 REPORT FORMAT (compact Telegram/mobile):
 Return recurring tracker updates as one compact fenced text block. Put only the codeblock in the scheduled update unless a safety refusal is needed outside it.
@@ -338,4 +324,5 @@ Do not estimate or recommend cash-out decisions. If the user asks, explain that 
 - `workflows/start-tracking.md` — tracking job workflow
 - `workflows/stop-tracking.md` — stop workflow
 - `examples/sample-slip.md` — example parsed slip and report
+- `scripts/fetch-scores.py` — pre-run ESPN score fetcher injected via `--script` (reliable scores + current time)
 - `references/profile-install-and-hardening.md` — profile-safe install, hardening checklist, and validation probe
