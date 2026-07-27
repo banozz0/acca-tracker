@@ -3,8 +3,8 @@
 Use this format for recurring scheduled Telegram/mobile updates. Send the whole update as a single fenced `text` codeblock so Telegram keeps the compact tracker alignment on mobile.
 
 ```text
-⚽️ Acca update -- 16:30
-Overall: ❔ UNVERIFIABLE
+⚽️ Acca update -- 16:30 GMT
+Overall: ❔ UNVERIFIABLE — 0/5 settled, 0 lost
 Progress: 0✅ 0🟢 0⏳ 0❌ 5❔
 
 1) Chelsea vs Man City
@@ -23,7 +23,7 @@ Before v2.0.2, reports could render as normal markdown paragraphs. In v2.0.2, re
 ````text
 ```text
 ⚽️ Acca update -- <HH:MM timezone>
-Overall: <emoji> <status>
+Overall: <emoji> <status> — <settled>/<total> settled, <lost> lost
 Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
 
 1) <Match>

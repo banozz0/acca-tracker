@@ -15,17 +15,20 @@ replaces a separate now.sh).
 import json, urllib.request, datetime, unicodedata
 
 # ===== per-job config — the agent fills these in at job-creation time =====
-# (leg number, home, away, kickoff date 'YYYYMMDD', selected team)
+# (leg number, home, away, kickoff date 'YYYYMMDD', market wording from the slip)
 SLIP = [
-    (1, "Germany", "Curaçao", "20260614", "Germany"),
-    (2, "Netherlands", "Japan", "20260614", "Netherlands"),
-    (3, "Spain", "Cape Verde", "20260615", "Spain"),
-    (4, "Sweden", "Tunisia", "20260615", "Sweden"),
-    (5, "Belgium", "Egypt", "20260615", "Belgium"),
+    (1, "Germany", "Curaçao", "20260614", "Match result: Germany win"),
+    (2, "Netherlands", "Japan", "20260614", "Match result: Netherlands win"),
+    (3, "Spain", "Cape Verde", "20260615", "Match result: Spain win"),
+    (4, "Sweden", "Tunisia", "20260615", "Over 2.5 goals"),
+    (5, "Belgium", "Egypt", "20260615", "BTTS: yes"),
 ]
 # Dates this job should actually fetch: its RUN DATE + any spillover prev date.
 RUN_DATES = ["20260615", "20260614"]
 # ==========================================================================
+
+UA = {"User-Agent": "Mozilla/5.0 (acca-tracker score check)"}
+
 
 def norm(s):
     s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
@@ -33,58 +36,118 @@ def norm(s):
         s = s.replace(j, "")
     return s.strip()
 
+
+def team_level(query, name):
+    """How well a slip team name matches an ESPN team name.
+
+    3 = exact, 2 = token subset (Bayern ⊆ Bayern Munich), 1 = weak prefix
+    match (Man United ~ Manchester United — but also Niger ~ Nigeria, so
+    level-1 matches are flagged in the output for the model to verify).
+    """
+    q, n = norm(query), norm(name)
+    if not q or not n:
+        return 0
+    if q == n:
+        return 3
+    qt, nt = set(q.split()), set(n.split())
+    if qt <= nt or nt <= qt:
+        return 2
+    if all(any(x.startswith(t) or t.startswith(x) for t in nt) for x in qt):
+        return 1
+    return 0
+
+
 def fetch(date):
+    """Return (events, error) for one date; never raises."""
     url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard?dates={date}"
     try:
-        with urllib.request.urlopen(url, timeout=25) as r:
-            return json.load(r).get("events", [])
+        req = urllib.request.Request(url, headers=UA)
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return json.load(r).get("events", []), None
     except Exception as e:
-        return [{"_error": str(e)}]
+        return [], str(e)
 
-# Fetch every relevant date and flatten. ESPN's `dates` filter uses a US
-# calendar date, so a late-evening European kickoff can land under the previous
-# day — searching the whole pool (not just the leg's nominal date) absorbs that.
-all_events = []
-for d in set(RUN_DATES):
-    all_events += fetch(d)
 
-def lookup(home, away, date):
-    h, a = norm(home), norm(away)
-    for e in all_events:
-        if "_error" in e:
-            return ("ERROR", e["_error"], "", "?", "?")
-        comp = (e.get("competitions") or [{}])[0]
-        cs = comp.get("competitors", [])
-        names = [norm(c.get("team", {}).get("displayName", "")) for c in cs] + \
-                [norm(c.get("team", {}).get("shortDisplayName", "")) for c in cs]
-        if any(h == n or h in n or n in h for n in names) and \
-           any(a == n or a in n or n in a for n in names):
-            st = e.get("status", {})
-            state = st.get("type", {}).get("state", "")
-            desc = st.get("type", {}).get("description", "")
-            clock = st.get("displayClock", "")
-            score = {}
-            for c in cs:
-                score[norm(c.get("team", {}).get("displayName", ""))] = c.get("score")
-            hs = next((v for k, v in score.items() if h == k or h in k or k in h), "?")
-            as_ = next((v for k, v in score.items() if a == k or a in k or k in a), "?")
-            return (state, desc, clock, hs, as_)
-    return None
+def competitor_names(c):
+    t = c.get("team", {})
+    return [t.get("displayName", ""), t.get("shortDisplayName", "")]
 
-now = datetime.datetime.now().astimezone()
-print(f"CURRENT TIME: {now.strftime('%Y-%m-%d %H:%M:%S %Z (%A)')}")
-print("LIVE SCORES (authoritative ESPN fetch — judge and format from THESE; do not fetch yourself):")
-for leg, home, away, date, sel in SLIP:
-    if date not in RUN_DATES:
-        print(f"  Leg {leg}: {home} vs {away} [{date}] -> future date, not checked this run")
-        continue
-    r = lookup(home, away, date)
-    if r is None:
-        print(f"  Leg {leg}: {home} vs {away} [{date}] -> NOT FOUND in ESPN feed (try fallback source)")
-    elif r[0] == "ERROR":
-        print(f"  Leg {leg}: {home} vs {away} [{date}] -> ESPN fetch error: {r[1]}")
-    else:
-        state, desc, clock, hs, as_ = r
-        tag = {"pre": "NOT STARTED", "in": "LIVE", "post": "FINISHED"}.get(state, state.upper())
-        clk = f" {clock}" if clock and state == "in" else ""
-        print(f"  Leg {leg}: {home} {hs}-{as_} {away} [{date}] -> {tag} ({desc}){clk} | pick: {sel}")
+
+def lookup(events, home, away):
+    """Best-scoring event where home and away match two DIFFERENT competitors.
+
+    Returns None or a dict with state/desc/clock/scores, the ESPN names it
+    matched, and weak=True when either side only matched at prefix level.
+    """
+    best = None
+    for e in events:
+        cs = (e.get("competitions") or [{}])[0].get("competitors", [])
+        if len(cs) < 2:
+            continue
+        levels = []  # (home_level, away_level, home_comp, away_comp)
+        for i, ci in enumerate(cs):
+            for j, cj in enumerate(cs):
+                if i == j:
+                    continue
+                hl = max(team_level(home, n) for n in competitor_names(ci))
+                al = max(team_level(away, n) for n in competitor_names(cj))
+                if hl and al:
+                    levels.append((hl + al, min(hl, al), ci, cj))
+        if not levels:
+            continue
+        score, weakest, hc, ac = max(levels, key=lambda x: (x[0], x[1]))
+        if best is None or (score, weakest) > (best[0], best[1]):
+            best = (score, weakest, e, hc, ac)
+    if best is None:
+        return None
+    _, weakest, e, hc, ac = best
+    st = e.get("status", {})
+    return {
+        "state": st.get("type", {}).get("state", ""),
+        "desc": st.get("type", {}).get("description", ""),
+        "clock": st.get("displayClock", ""),
+        "home_score": hc.get("score", "?"),
+        "away_score": ac.get("score", "?"),
+        "espn_home": hc.get("team", {}).get("displayName", "?"),
+        "espn_away": ac.get("team", {}).get("displayName", "?"),
+        "weak": weakest <= 1,
+    }
+
+
+def main():
+    events, failed = [], {}
+    for d in sorted(set(RUN_DATES)):
+        ev, err = fetch(d)
+        events += ev
+        if err:
+            failed[d] = err
+
+    now = datetime.datetime.now().astimezone()
+    print(f"CURRENT TIME: {now.strftime('%Y-%m-%d %H:%M:%S %Z (%A)')}")
+    print("LIVE SCORES (authoritative ESPN fetch — judge and format from THESE; do not fetch yourself):")
+    for d, err in failed.items():
+        print(f"  WARNING: ESPN fetch failed for {d}: {err} — legs on that date need a fallback source")
+    for leg, home, away, date, market in SLIP:
+        head = f"  Leg {leg}: {home} vs {away} [{date}]"
+        if date not in RUN_DATES:
+            print(f"{head} -> future date, not checked this run")
+            continue
+        if date in failed:
+            print(f"{head} -> ESPN fetch failed for this date (try fallback source)")
+            continue
+        r = lookup(events, home, away)
+        if r is None:
+            print(f"{head} -> NOT FOUND in ESPN feed (try fallback source)")
+            continue
+        tag = {"pre": "NOT STARTED", "in": "LIVE", "post": "FINISHED"}.get(r["state"], r["state"].upper())
+        clk = f" {r['clock']}" if r["clock"] and r["state"] == "in" else ""
+        line = (f"  Leg {leg}: {home} {r['home_score']}-{r['away_score']} {away} "
+                f"[{date}] -> {tag} ({r['desc']}){clk} | market: {market}")
+        if r["weak"]:
+            line += (f" | WEAK NAME MATCH — ESPN fixture is '{r['espn_home']} vs "
+                     f"{r['espn_away']}': verify this is the right game before using the score")
+        print(line)
+
+
+if __name__ == "__main__":
+    main()

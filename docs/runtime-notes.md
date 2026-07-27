@@ -52,7 +52,7 @@ When score/status data is missing, stale, ambiguous, or conflicting:
 - cite what was checked
 - do not guess scores
 - try normalized team aliases plus competition/date search before giving up
-- try TheSportsDB, readable SofaScore/public pages, ESPN/BBC-style match centres, official pages, and fallback search where appropriate
+- follow the source ladder: ESPN scoreboard API first, then TheSportsDB, ESPN/BBC-style match centres, official pages, and fallback search snippets (see `knowledge/data-sources.md`)
 - do not infer final results from kickoff time alone
 - ask for clarification when team names or kickoff dates do not uniquely identify the match
 - keep the source mismatch/failure note brief and avoid repeating the same caveat per leg
@@ -74,8 +74,8 @@ Hermes does not inject the current time into a cron agent's prompt — the agent
 
 Avoid this two ways:
 
-- **Status from the source, not the clock.** Bake `RUN DATE: <YYYY-MM-DD>` into each per-date job and have it query the ESPN scoreboard for that date every run; the API's `status.type.state` (`pre`/`in`/`post`) decides not-started/live/finished. Legs on later dates stay PENDING.
-- **Real time for the header.** Attach a tiny script that prints the current time and is injected into the prompt each run: `~/.hermes/scripts/now.sh` → `date '+CURRENT TIME: %Y-%m-%d %H:%M:%S %Z'`, created with `--script now.sh`.
+- **Status from the source, not the clock.** Bake `RUN DATE: <YYYY-MM-DD>` into each per-date job; the ESPN `status.type.state` (`pre`/`in`/`post`) in the injected scores decides not-started/live/finished. Legs on later dates stay PENDING.
+- **Scores and time from the pre-run script.** Attach `scripts/fetch-scores.py` (copied to `~/.hermes/scripts/acca-<id>.py`, `SLIP` + `RUN_DATES` filled in) with `--script acca-<id>.py`. Each run its stdout — a `CURRENT TIME:` line plus an authoritative `LIVE SCORES:` block — is injected into the prompt, so the agent never fetches or guesses. This replaces the older separate `now.sh` time script.
 
 ## Silent runs (don't ping when nothing is happening)
 

@@ -59,6 +59,18 @@ Per event, read:
 
 Match by both teams + date, and confirm `state` and score before settling a leg. If the exact league code is unknown, query `all` for the date and filter by team names.
 
+### Why ESPN stays primary (free alternatives evaluated 2026-07-27)
+
+Live-tested against the same match day:
+
+- **ESPN `all` scoreboard** — ~84 events on a Saturday, live in-play state + clock, no key. Clear winner.
+- **TheSportsDB free tier** — returned only 3 events for the same day; final scores only, no live endpoint. Secondary cross-check only.
+- **football-data.org** — free tier needs an API key and covers ~12 top competitions with tight rate limits. Optional keyed fallback, not a default.
+- **fotmob unofficial API** — returned HTTP 404; unusable for automation.
+- **OpenLigaDB** — reachable but German competitions only.
+
+Re-evaluate if ESPN's unofficial endpoint breaks; until then it is the primary source and the ladder below covers gaps.
+
 ## TheSportsDB
 
 TheSportsDB can be a useful structured public source for football events and scores.

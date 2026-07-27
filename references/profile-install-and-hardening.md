@@ -22,7 +22,7 @@ Start a fresh Hermes session or `/reset` after installing because skill loading 
 
 ## Pre-install hardening checklist
 
-Before installing or updating the profile copy:
+Before installing or updating the profile copy, run `python3 scripts/validate.py` in the source repo (frontmatter, links, version sync, and the score-fetcher unit tests), then confirm:
 
 - Frontmatter starts at byte 0 with `---` and has a closing `---` block.
 - `name`, `description`, `version`, `author`, `license`, `platforms`, and `metadata.hermes.tags` are present.

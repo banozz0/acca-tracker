@@ -22,7 +22,7 @@ Start read-only tracking for this slip? Reply yes to create the job, or edit any
 
 ```text
 ⚽️ Acca update -- 22:15 CET
-Overall: 🟡 PARTIAL
+Overall: 🟡 PARTIAL — 1/3 settled, 0 lost
 Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
 
 1) Arsenal vs PSG
@@ -53,14 +53,14 @@ Boundary: status only, no betting/cash-out advice.
 
 ```text
 ⚽️ Acca update -- 16:30 GMT
-Overall: ❔ UNVERIFIABLE
+Overall: ❔ UNVERIFIABLE — 0/3 settled, 0 lost
 Progress: 0✅ 0🟢 0⏳ 0❌ 3❔
 
 1) Arsenal vs PSG
    Market: Arsenal win
    Score: unavailable
    Status: ❔ UNVERIFIABLE
-   Source: TheSportsDB/SofaScore/ESPN checked; no clear match
+   Source: ESPN API/TheSportsDB/search checked; no clear match
    Next: retry 16:45
 
 2) Bayern vs Inter
@@ -87,7 +87,7 @@ Rule asserted: this report does **not** include `TRACKING COMPLETE`; unverifiabl
 
 ```text
 ⚽️ Acca update -- 18:00 GMT
-Overall: ❌ DEAD
+Overall: ❌ DEAD — 1/2 settled, 1 lost
 Progress: 0✅ 0🟢 1⏳ 1❌ 0❔
 
 1) Bayern vs Inter
@@ -119,27 +119,27 @@ Recurring Telegram updates should be sent as the fenced `text` block itself, not
 
 ```text
 ⚽️ Acca update -- 15:45 CET
-Overall: 🟢 LIVE
+Overall: 🟢 LIVE — 0/1 settled, 0 lost
 Progress: 0✅ 1🟢 0⏳ 0❌ 0❔
 
 1) Bayern Munich vs Dortmund
    Market: Over 2.5 goals
    Score: 2-1 68'
    Status: 🟢 WINNING
-   Source: TheSportsDB + public match centre matched
+   Source: ESPN scoreboard API matched
    Next: final confirmation
 
 Next check: 16:00 CET
 Boundary: status only, no betting/cash-out advice.
 ```
 
-Rule asserted: top-flight public fixtures should try TheSportsDB, SofaScore/search, ESPN/BBC-style sources, and official pages before `UNVERIFIABLE`.
+Rule asserted: top-flight public fixtures should try the ESPN scoreboard API first, then TheSportsDB, match-centre pages, official pages, and search snippets before `UNVERIFIABLE`.
 
 ## Regression: live Premier League-style fixture lookup
 
 ```text
 ⚽️ Acca update -- 16:10 GMT
-Overall: 🟢 LIVE
+Overall: 🟢 LIVE — 0/2 settled, 0 lost
 Progress: 0✅ 1🟢 1⏳ 0❌ 0❔
 
 1) Man United vs Chelsea
@@ -166,7 +166,7 @@ Rule asserted: aliases such as `Man United` / `Manchester United` can be searche
 
 ```text
 ⚽️ Acca update -- 19:30 GMT
-Overall: 🟡 PARTIAL
+Overall: 🟡 PARTIAL — 1/3 settled, 0 lost
 Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
 
 1) Arsenal vs PSG
@@ -197,14 +197,14 @@ Boundary: status only, no betting/cash-out advice.
 
 ```text
 ⚽️ Acca update -- 14:00 GMT
-Overall: ❔ UNVERIFIABLE
+Overall: ❔ UNVERIFIABLE — 0/1 settled, 0 lost
 Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
 
 1) Rangers vs United
    Market: Rangers win
    Score: unavailable
    Status: ❔ UNVERIFIABLE
-   Source: TheSportsDB/SofaScore/search checked
+   Source: ESPN API/TheSportsDB/search checked
    Next: retry 14:15
 
 Note: multiple teams matched; need league/date confirmation.
@@ -216,7 +216,7 @@ Boundary: status only, no betting/cash-out advice.
 
 ```text
 ⚽️ Acca update -- 21:00 GMT
-Overall: 🟡 PARTIAL
+Overall: 🟡 PARTIAL — 2/3 settled, 0 lost
 Progress: 1✅ 0🟢 1⏳ 0❌ 0❔ 1⚪
 
 1) Arsenal vs PSG
@@ -236,7 +236,7 @@ Progress: 1✅ 0🟢 1⏳ 0❌ 0❔ 1⚪
    Score: not started
    Status: ⏳ PENDING
    Source: competition fixture page
-   Next: kickoff 20:00
+   Next: kickoff 21:30
 
 Next check: 21:15 GMT
 Boundary: status only, no betting/cash-out advice.
@@ -248,7 +248,7 @@ Rule asserted: a VOID leg appends `1⚪` to the Progress line, and a void (not l
 
 ```text
 ⚽️ Acca update -- 14:00 GMT
-Overall: ❔ UNVERIFIABLE
+Overall: ❔ UNVERIFIABLE — 0/1 settled, 0 lost
 Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
 
 1) Arsenal vs Chelsea

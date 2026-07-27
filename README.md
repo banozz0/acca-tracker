@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.3.0
+Version: 2.4.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
@@ -46,6 +46,15 @@ rsync -a --delete --exclude '.git' ./ \
 Avoid installing into `~/.hermes/skills` unless you intentionally want the default/shared profile skill location.
 
 Then start a fresh Hermes session and load/use the skill by name; skill loading is session-cached.
+
+## Validate the repo
+
+```bash
+python3 scripts/validate.py        # frontmatter, links, version sync, script unit tests
+python3 scripts/test_fetch_scores.py   # score-fetcher unit tests only (offline)
+```
+
+The same validation runs in CI on every push (`.github/workflows/validate.yml`).
 
 ## Verify after install
 
