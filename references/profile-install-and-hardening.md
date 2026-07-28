@@ -33,6 +33,7 @@ Before installing or updating the profile copy, run `python3 scripts/validate.py
 - `TRACKING COMPLETE` is allowed only when all legs are terminal/settled, the user stops tracking, or Hermes explicitly says this is the final/max-repeat run.
 - Lookup failure, blocked sources, unverifiable legs, or guessed wall-clock expiry must not complete tracking.
 - Cron prompts omit stake, return, balances, ticket/account identifiers, QR/barcodes, payment details, and odds unless explicitly requested for display.
+- Recurring updates carry no boundary footer and respect the script's `CHANGE SINCE LAST RUN` line (`NO` -> `[SILENT]`); cron schedules are never tighter than `*/15`.
 - Underage or illegal gambling signals cause refusal/stop-tracking guidance, not continued betting tracking.
 
 ## Validation probe

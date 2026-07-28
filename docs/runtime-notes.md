@@ -77,9 +77,9 @@ Avoid this two ways:
 - **Status from the source, not the clock.** Bake `RUN DATE: <YYYY-MM-DD>` into each per-date job; the ESPN `status.type.state` (`pre`/`in`/`post`) in the injected scores decides not-started/live/finished. Legs on later dates stay PENDING.
 - **Scores and time from the pre-run script.** Attach `scripts/fetch-scores.py` (copied to `~/.hermes/scripts/acca-<id>.py`, `SLIP` + `RUN_DATES` filled in) with `--script acca-<id>.py`. Each run its stdout — a `CURRENT TIME:` line plus an authoritative `LIVE SCORES:` block — is injected into the prompt, so the agent never fetches or guesses. This replaces the older separate `now.sh` time script.
 
-## Silent runs (don't ping when nothing is happening)
+## Silent runs (send on change, not on schedule)
 
-A windowed job still fires on schedule even when no leg is live yet. Use the runtime's silent token (`[SILENT]` in Hermes — respond with exactly that and nothing else) to suppress delivery, otherwise the user gets a "nothing yet" message every interval. Send a real report only when at least one leg is live or newly settled, or the overall status changes.
+A windowed job still fires on schedule even when nothing new happened. The pre-run script compares each leg's state+score to the previous run and prints `CHANGE SINCE LAST RUN: YES/NO`; on `NO` the agent responds with the runtime's silent token (`[SILENT]` in Hermes — exactly that and nothing else). A live match whose score has not moved stays silent — the moving clock alone is not news, and a settled acca is never re-reported. Keep the cron interval at `*/15` or slower; each firing costs model credits and change detection already suppresses the noise.
 
 ## Telegram report rendering
 

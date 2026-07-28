@@ -1,89 +1,68 @@
 # Compact Report Format
 
-Use this format for recurring scheduled Telegram/mobile updates. Send the whole update as a single fenced `text` codeblock so Telegram keeps the compact tracker alignment on mobile.
+Use this format for recurring scheduled Telegram/mobile updates. Send the whole update as a single fenced `text` codeblock so Telegram keeps the alignment on mobile. One line per leg — no per-leg Market/Score/Status/Source sub-lines, and no boundary footer (the status-only boundary is stated once at job creation).
 
 ```text
-⚽️ Acca update -- 16:30 GMT
-Overall: ❔ UNVERIFIABLE — 0/5 settled, 0 lost
-Progress: 0✅ 0🟢 0⏳ 0❌ 5❔
-
-1) Chelsea vs Man City
-   Market: Man City win + BTTS Yes
-   Score: unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: ESPN/BBC/SofaScore checked
-   Next: retry 16:45
-
-Next check: 16:45
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — <HH:MM timezone> · <emoji> <overall> · <settled>/<total> settled
+1) <Home> <score> <Away> · <FT / 45' / KO HH:MM> — <market>: <emoji> <status>
+2) <Home> <score> <Away> · <FT / 45' / KO HH:MM> — <market>: <emoji> <status>
+Next check: <HH:MM timezone> · ESPN
 ```
 
-Before v2.0.2, reports could render as normal markdown paragraphs. In v2.0.2, recurring tracker updates should render as compact terminal-style text blocks:
+Live example:
 
-````text
 ```text
-⚽️ Acca update -- <HH:MM timezone>
-Overall: <emoji> <status> — <settled>/<total> settled, <lost> lost
-Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
-
-1) <Match>
-   Market: <short market>
-   Score: <score/status or unavailable>
-   Status: <emoji> <leg status>
-   Source: <source used or compact checked list>
-   Next: <retry/kickoff/final/status only>
-
-Next check: <HH:MM timezone>
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 01:00 CEST · 🟢 LIVE · 0/2 settled
+1) CRB 2-0 Vila Nova · 29' — CRB win: 🟢 WINNING
+2) Sport 0-0 Cuiabá · 31' — Over 1.5: ⏳ PENDING
+Next check: 01:15 CEST · ESPN
 ```
-````
+
+Final example:
+
+```text
+⚽️ Acca — 02:30 CEST · ✅ WON · 2/2 settled
+1) CRB 2-0 Vila Nova · FT — CRB win: ✅ WON
+2) Sport 1-1 Cuiabá · FT — Over 1.5: ✅ WON
+TRACKING COMPLETE · ESPN
+```
 
 Rules:
 
-- Use at most 4-5 short lines per leg.
-- Cite the source used or the sources checked for each leg.
-- Put caveats once at the bottom.
-- Keep caveats short, for example: `Note: source dates conflicted; retrying.`
+- One line per leg, most lines under ~72 characters.
 - Leg-status emojis: ✅ won, 🟢 live/winning, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
 - Overall-status emojis: ✅ WON, 🟢 LIVE, 🟡 PARTIAL, ⏳ PENDING, ❌ DEAD, ❔ UNVERIFIABLE.
-- Progress counters use leg-status emojis ✅ 🟢 ⏳ ❌ ❔ (LOST and DEAD both count under ❌). Append a `<count>⚪` only when at least one leg is VOID.
-- Include `Next check` whenever tracking continues.
-- Make next timing clear: `Next: retry 16:45`, `Next: kickoff 20:00`, `Next: final`, or `Next: status only`.
-- Keep most lines under about 72 characters.
-- Use `TRACKING COMPLETE` only when every leg is final/settled, Hermes explicitly says the max-repeat run has been reached, or the user stopped tracking.
-- Do not include betting advice, predictions, cash-out advice, or odds optimization.
+- The trailing `· ESPN` covers all script-fed legs; only a leg that used a fallback source gets `(via BBC)` etc. appended to its line.
+- `Next check` is computed from the actual cron interval — never guess a shorter one.
+- Caveats: one short `Note:` line above the last line, e.g. `Note: source dates conflicted; retrying.` Never repeat a caveat per leg.
+- `TRACKING COMPLETE` only when every leg is final/settled, Hermes explicitly says the max-repeat run has been reached, or the user stopped tracking.
+- No betting advice, predictions, cash-out advice, or odds optimization.
 
-## Many-leg slips (summary + active detail)
+## Send on change, not on schedule
 
-A big accumulator (5+ legs, often across several dates) must not print every leg in full every 15 minutes — that is an unreadable wall of "not started" on mobile. Instead:
+The pre-run script prints `CHANGE SINCE LAST RUN: YES/NO` by comparing each leg's state+score to the previous run:
 
-- **Stay silent when nothing is happening.** Before any leg is live, and on any run where nothing is live or newly settled, respond with the runtime's silent token (`[SILENT]` in Hermes) instead of sending a "nothing yet" update. Otherwise the job spams a message every interval.
-- Keep the `Overall` + `Progress` header covering **all** legs, so the whole-acca standing is always visible.
-- Print a per-leg block **only** for legs that are live (WINNING) or settled (WON/LOST/DEAD/VOID). **Never print a PENDING / not-started leg as its own block** — they exist only as the ⏳ count.
-- If you are sending but no leg is live or settled yet, use a single line such as `No legs live or settled yet.` plus a `Next up:` line — no leg blocks.
-- Add a short `Next up` line and an `N legs still to play` count so upcoming legs are acknowledged without detail.
-- Output only the report itself — never echo instruction markers (`‼️`), prompt headings, or meta-notes.
-- This requires the job prompt to hold the **full slip** (all legs), so the header counts and any post-midnight confirmations are correct.
+- `NO` -> respond with the runtime's silent token (`[SILENT]` in Hermes). A live match whose score has not moved is not news; the match clock alone never justifies a message.
+- `YES` -> send, unless every changed leg is still `NOT STARTED` (schedule confirmations are covered by the job-creation message).
+- Always send when a leg settles or the overall status changes; after the final all-settled report, later runs show no change and stay silent — never re-send a settled report.
 
-Example — a 13-leg World Cup slip, update on 15 June at 18:30 (4 legs already settled, one live, the rest upcoming):
+## Many-leg slips (5+ legs)
+
+A big accumulator must not print every leg every time — that is an unreadable wall on mobile. Instead:
+
+- Keep the one-line header covering **all** legs, and add a `Progress:` counter line under it: `Progress: 4✅ 1🟢 8⏳ 0❌ 0❔` (LOST and DEAD both count under ❌; append `<count>⚪` only when a leg is VOID).
+- Print leg lines **only** for legs that are live or settled. Pending legs exist only in the counts, acknowledged by one `Next up:` line.
+- This requires the job prompt to hold the **full slip** (all legs), so the header counts and post-midnight confirmations are correct.
+
+Example — a 13-leg World Cup slip, update at 18:30 (4 settled, one live):
 
 ```text
-⚽️ Acca update -- 18:30 CEST
-Overall: 🟡 PARTIAL — 4/13 settled, 0 lost
+⚽️ Acca — 18:30 CEST · 🟡 PARTIAL · 4/13 settled
 Progress: 4✅ 1🟢 8⏳ 0❌ 0❔
-
-Live now:
-3) Spain vs Cape Verde
-   Market: Spain win
-   Score: 1-0 23'
-   Status: 🟢 WINNING · Source: ESPN
-
-Settled today:
-4) Sweden vs Tunisia — Sweden win — FT 2-1 — ✅ WON
-
-Next up today: 5) Belgium vs Egypt 21:00
-Next check: 18:45 CEST · 8 legs still to play
-Boundary: status only, no betting/cash-out advice.
+3) Spain 1-0 Cape Verde · 23' — Spain win: 🟢 WINNING
+4) Sweden 2-1 Tunisia · FT — Sweden win: ✅ WON
+Next up: Belgium vs Egypt KO 21:00
+Next check: 18:45 CEST · ESPN
 ```
 
-If a leg lost, the header flips (`Overall: ❌ DEAD — acca lost on leg N`) and that leg is detailed; the rest continue as status-only counts.
+If a leg lost, the header flips (`❌ DEAD`) and that leg's line is shown; the rest continue as counts only, and later runs stay silent except final-settlement updates.

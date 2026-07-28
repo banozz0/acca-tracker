@@ -6,6 +6,7 @@
 import importlib.util
 import io
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -70,6 +71,10 @@ class TestLookup(unittest.TestCase):
 
 
 class TestFetchErrorIsolation(unittest.TestCase):
+    def setUp(self):
+        # fresh change-detection state per test
+        fs.STATE_PATH = str(Path(tempfile.mkdtemp()) / "state.json")
+
     def run_main(self, slip, run_dates, fetch_results):
         old = fs.SLIP, fs.RUN_DATES, fs.fetch
         fs.SLIP, fs.RUN_DATES = slip, run_dates
@@ -96,6 +101,31 @@ class TestFetchErrorIsolation(unittest.TestCase):
         self.assertIn("Leg 2: Spain vs Sweden [20260102] -> ESPN fetch failed", out)
         self.assertIn("WARNING: ESPN fetch failed for 20260102: HTTP 500", out)
         self.assertIn("Leg 3: Belgium vs Egypt [20260103] -> future date, not checked", out)
+
+    def test_change_detection_across_runs(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]
+        dates = ["20260101"]
+        out1 = self.run_main(slip, dates, {"20260101": ([event("Arsenal", "Chelsea", "0", "0",
+                                                               state="in", desc="First Half",
+                                                               clock="10'")], None)})
+        self.assertIn("CHANGE SINCE LAST RUN: YES — Leg 1: first check -> LIVE 0-0", out1)
+        # same state+score, only the clock moved -> NO change
+        out2 = self.run_main(slip, dates, {"20260101": ([event("Arsenal", "Chelsea", "0", "0",
+                                                               state="in", desc="First Half",
+                                                               clock="24'")], None)})
+        self.assertIn("CHANGE SINCE LAST RUN: NO", out2)
+        # goal -> YES with the diff
+        out3 = self.run_main(slip, dates, {"20260101": ([event("Arsenal", "Chelsea", "1", "0",
+                                                               state="in", desc="First Half",
+                                                               clock="31'")], None)})
+        self.assertIn("CHANGE SINCE LAST RUN: YES — Leg 1: LIVE 0-0 -> LIVE 1-0", out3)
+
+    def test_failed_fetch_keeps_previous_state_and_reports_no_change(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]
+        dates = ["20260101"]
+        self.run_main(slip, dates, {"20260101": ([event("Arsenal", "Chelsea", "2", "0")], None)})
+        out = self.run_main(slip, dates, {"20260101": ([], "HTTP 500")})
+        self.assertIn("CHANGE SINCE LAST RUN: NO", out)
 
     def test_live_clock_and_weak_warning_in_output(self):
         out = self.run_main(

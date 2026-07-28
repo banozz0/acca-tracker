@@ -12,7 +12,7 @@ job, then create the cron job with `--script acca-<id>.py`. Its stdout is
 prepended to the tracking prompt each run (and it also emits CURRENT TIME, so it
 replaces a separate now.sh).
 """
-import json, urllib.request, datetime, unicodedata
+import json, os, urllib.request, datetime, unicodedata
 
 # ===== per-job config — the agent fills these in at job-creation time =====
 # (leg number, home, away, kickoff date 'YYYYMMDD', market wording from the slip)
@@ -28,6 +28,26 @@ RUN_DATES = ["20260615", "20260614"]
 # ==========================================================================
 
 UA = {"User-Agent": "Mozilla/5.0 (acca-tracker score check)"}
+
+# Last-seen state per leg, so runs where nothing changed can stay [SILENT].
+# Lives next to this script; delete it together with the script when the job ends.
+STATE_PATH = os.path.splitext(os.path.abspath(__file__))[0] + ".state.json"
+
+
+def load_state():
+    try:
+        with open(STATE_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_state(state):
+    try:
+        with open(STATE_PATH, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass  # state is an optimization; never let it break the score output
 
 
 def norm(s):
@@ -127,6 +147,7 @@ def main():
     print("LIVE SCORES (authoritative ESPN fetch — judge and format from THESE; do not fetch yourself):")
     for d, err in failed.items():
         print(f"  WARNING: ESPN fetch failed for {d}: {err} — legs on that date need a fallback source")
+    snapshot = {}
     for leg, home, away, date, market in SLIP:
         head = f"  Leg {leg}: {home} vs {away} [{date}]"
         if date not in RUN_DATES:
@@ -141,12 +162,25 @@ def main():
             continue
         tag = {"pre": "NOT STARTED", "in": "LIVE", "post": "FINISHED"}.get(r["state"], r["state"].upper())
         clk = f" {r['clock']}" if r["clock"] and r["state"] == "in" else ""
+        snapshot[str(leg)] = f"{tag} {r['home_score']}-{r['away_score']}"
         line = (f"  Leg {leg}: {home} {r['home_score']}-{r['away_score']} {away} "
                 f"[{date}] -> {tag} ({r['desc']}){clk} | market: {market}")
         if r["weak"]:
             line += (f" | WEAK NAME MATCH — ESPN fixture is '{r['espn_home']} vs "
                      f"{r['espn_away']}': verify this is the right game before using the score")
         print(line)
+
+    # Change detection: compare state+score per leg against the previous run so
+    # the agent can stay [SILENT] on runs where nothing moved (no clock spam —
+    # the live match minute is deliberately NOT part of the snapshot).
+    old = load_state()
+    changes = [f"Leg {leg}: {old.get(leg, 'first check')} -> {val}"
+               for leg, val in snapshot.items() if old.get(leg) != val]
+    save_state({**old, **snapshot})
+    if changes:
+        print("CHANGE SINCE LAST RUN: YES — " + "; ".join(changes))
+    else:
+        print("CHANGE SINCE LAST RUN: NO — same states and scores as the previous check")
 
 
 if __name__ == "__main__":

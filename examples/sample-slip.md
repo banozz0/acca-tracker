@@ -14,71 +14,36 @@
 3. Luton vs Northampton — Total goals: under 2.5 — odds 1.90 — fields clear
 
 Privacy: tracking jobs may store these match details until stopped or expired.
+Reports are status-only — no betting or cash-out advice.
 
 Start read-only tracking for this slip? Reply yes to create the job, or edit any leg first.
 ```
 
+The boundary line appears here once; recurring updates do not repeat it.
+
 ## Example report: compact live update
 
 ```text
-⚽️ Acca update -- 22:15 CET
-Overall: 🟡 PARTIAL — 1/3 settled, 0 lost
-Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
-
-1) Arsenal vs PSG
-   Market: Arsenal win
-   Score: FT 2-1
-   Status: ✅ WON
-   Source: Example official match centre
-
-2) Bayern vs Inter
-   Market: BTTS Yes
-   Score: 1-1 HT
-   Status: 🟢 WINNING
-   Source: Example live-score source
-   Next: final confirmation
-
-3) Luton vs Northampton
-   Market: Under 2.5 goals
-   Score: not started
-   Status: ⏳ PENDING
-   Source: Example league fixture page
-   Next: awaiting kickoff
-
-Next check: 22:30 CET
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 22:15 CET · 🟡 PARTIAL · 1/3 settled
+1) Arsenal 2-1 PSG · FT — Arsenal win: ✅ WON
+2) Bayern 1-1 Inter · HT — BTTS Yes: 🟢 WINNING
+3) Luton 0-0 Northampton · KO 22:30 — Under 2.5: ⏳ PENDING
+Next check: 22:30 CET · ESPN
 ```
+
+## Regression: unchanged scores stay silent
+
+If the script prints `CHANGE SINCE LAST RUN: NO`, the run responds `[SILENT]` — no message is sent, even while matches are live. The match clock moving is not a change.
 
 ## Regression: all legs unverifiable on first check continues
 
 ```text
-⚽️ Acca update -- 16:30 GMT
-Overall: ❔ UNVERIFIABLE — 0/3 settled, 0 lost
-Progress: 0✅ 0🟢 0⏳ 0❌ 3❔
-
-1) Arsenal vs PSG
-   Market: Arsenal win
-   Score: unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: ESPN API/TheSportsDB/search checked; no clear match
-   Next: retry 16:45
-
-2) Bayern vs Inter
-   Market: BTTS Yes
-   Score: unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: BBC/SofaScore/search checked; ambiguous date
-   Next: retry 16:45
-
-3) Luton vs Northampton
-   Market: Under 2.5 goals
-   Score: unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: league page/search checked; unreadable result
-   Next: retry 16:45
-
-Next check: 16:45 GMT
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 16:30 GMT · ❔ UNVERIFIABLE · 0/3 settled
+1) Arsenal vs PSG — Arsenal win: ❔ UNVERIFIABLE
+2) Bayern vs Inter — BTTS Yes: ❔ UNVERIFIABLE
+3) Luton vs Northampton — Under 2.5: ❔ UNVERIFIABLE
+Note: ESPN API/TheSportsDB/search checked; no clear match. Retrying.
+Next check: 16:45 GMT · ESPN
 ```
 
 Rule asserted: this report does **not** include `TRACKING COMPLETE`; unverifiable lookup is non-terminal.
@@ -86,26 +51,13 @@ Rule asserted: this report does **not** include `TRACKING COMPLETE`; unverifiabl
 ## Regression: one leg lost makes acca dead
 
 ```text
-⚽️ Acca update -- 18:00 GMT
-Overall: ❌ DEAD — 1/2 settled, 1 lost
-Progress: 0✅ 0🟢 1⏳ 1❌ 0❔
-
-1) Bayern vs Inter
-   Market: BTTS Yes
-   Score: FT 0-0
-   Status: ❌ LOST
-   Source: Example official match centre
-
-2) Luton vs Northampton
-   Market: Under 2.5 goals
-   Score: not started
-   Status: ⏳ PENDING
-   Source: Example league fixture page
-   Next: status only
-
-Next check: 18:15 GMT
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 18:00 GMT · ❌ DEAD · 1/2 settled
+1) Bayern 0-0 Inter · FT — BTTS Yes: ❌ LOST
+2) Luton 0-0 Northampton · KO 20:00 — Under 2.5: ⏳ PENDING
+Next check: 18:15 GMT · ESPN
 ```
+
+After this death notice, later runs stay `[SILENT]` until the remaining leg reaches its final result.
 
 ## Regression: user asks why no score
 
@@ -113,152 +65,53 @@ Boundary: status only, no betting/cash-out advice.
 I couldn't verify a score because the public sources checked were unavailable, unreadable, or did not clearly match the teams/date/competition. I won't guess a score. I'll keep the leg as UNVERIFIABLE and retry on the next scheduled check unless you stop tracking or provide clearer match details.
 ```
 
-Recurring Telegram updates should be sent as the fenced `text` block itself, not as a loose paragraph. This keeps columns/indentation stable on mobile.
-
-## Regression: live Bundesliga-style fixture lookup
+## Regression: alias lookup
 
 ```text
-⚽️ Acca update -- 15:45 CET
-Overall: 🟢 LIVE — 0/1 settled, 0 lost
-Progress: 0✅ 1🟢 0⏳ 0❌ 0❔
-
-1) Bayern Munich vs Dortmund
-   Market: Over 2.5 goals
-   Score: 2-1 68'
-   Status: 🟢 WINNING
-   Source: ESPN scoreboard API matched
-   Next: final confirmation
-
-Next check: 16:00 CET
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 16:10 GMT · 🟢 LIVE · 0/2 settled
+1) Man United 1-1 Chelsea · HT — BTTS Yes: 🟢 WINNING
+2) Liverpool 0-0 Everton · KO 17:30 — Liverpool win: ⏳ PENDING
+Next check: 16:25 GMT · ESPN
 ```
 
-Rule asserted: top-flight public fixtures should try the ESPN scoreboard API first, then TheSportsDB, match-centre pages, official pages, and search snippets before `UNVERIFIABLE`.
-
-## Regression: live Premier League-style fixture lookup
-
-```text
-⚽️ Acca update -- 16:10 GMT
-Overall: 🟢 LIVE — 0/2 settled, 0 lost
-Progress: 0✅ 1🟢 1⏳ 0❌ 0❔
-
-1) Man United vs Chelsea
-   Market: BTTS Yes
-   Score: 1-1 HT
-   Status: 🟢 WINNING
-   Source: BBC Sport match page matched aliases/date
-   Next: final confirmation
-
-2) Liverpool vs Everton
-   Market: Liverpool win
-   Score: not started
-   Status: ⏳ PENDING
-   Source: official fixture page
-   Next: kickoff 17:30
-
-Next check: 16:25 GMT
-Boundary: status only, no betting/cash-out advice.
-```
-
-Rule asserted: aliases such as `Man United` / `Manchester United` can be searched, while the original slip wording remains visible.
-
-## Regression: mixed live/final legs
-
-```text
-⚽️ Acca update -- 19:30 GMT
-Overall: 🟡 PARTIAL — 1/3 settled, 0 lost
-Progress: 1✅ 1🟢 1⏳ 0❌ 0❔
-
-1) Arsenal vs PSG
-   Market: Arsenal win
-   Score: FT 2-1
-   Status: ✅ WON
-   Source: official match centre
-
-2) Bayern vs Inter
-   Market: BTTS Yes
-   Score: 1-1 52'
-   Status: 🟢 WINNING
-   Source: ESPN match centre
-   Next: final confirmation
-
-3) Luton vs Northampton
-   Market: Under 2.5 goals
-   Score: not started
-   Status: ⏳ PENDING
-   Source: competition fixture page
-   Next: kickoff 20:00
-
-Next check: 19:45 GMT
-Boundary: status only, no betting/cash-out advice.
-```
+Rule asserted: aliases such as `Man United` / `Manchester United` can be matched, while the original slip wording remains visible. Top-flight fixtures should try the ESPN scoreboard API first, then TheSportsDB, match-centre pages, official pages, and search snippets before `UNVERIFIABLE`.
 
 ## Regression: ambiguous team names
 
 ```text
-⚽️ Acca update -- 14:00 GMT
-Overall: ❔ UNVERIFIABLE — 0/1 settled, 0 lost
-Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
-
-1) Rangers vs United
-   Market: Rangers win
-   Score: unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: ESPN API/TheSportsDB/search checked
-   Next: retry 14:15
-
+⚽️ Acca — 14:00 GMT · ❔ UNVERIFIABLE · 0/1 settled
+1) Rangers vs United — Rangers win: ❔ UNVERIFIABLE
 Note: multiple teams matched; need league/date confirmation.
-Next check: 14:15 GMT
-Boundary: status only, no betting/cash-out advice.
+Next check: 14:15 GMT · ESPN
 ```
 
-## Regression: void leg counts under ⚪
+## Regression: void leg counts and keeps acca alive
 
 ```text
-⚽️ Acca update -- 21:00 GMT
-Overall: 🟡 PARTIAL — 2/3 settled, 0 lost
-Progress: 1✅ 0🟢 1⏳ 0❌ 0❔ 1⚪
-
-1) Arsenal vs PSG
-   Market: Draw no bet: Arsenal
-   Score: FT 1-1
-   Status: ⚪ VOID
-   Source: official match centre
-
-2) Bayern vs Inter
-   Market: BTTS Yes
-   Score: FT 2-1
-   Status: ✅ WON
-   Source: ESPN match centre
-
-3) Luton vs Northampton
-   Market: Under 2.5 goals
-   Score: not started
-   Status: ⏳ PENDING
-   Source: competition fixture page
-   Next: kickoff 21:30
-
-Next check: 21:15 GMT
-Boundary: status only, no betting/cash-out advice.
+⚽️ Acca — 21:00 GMT · 🟡 PARTIAL · 2/3 settled
+1) Arsenal 1-1 PSG · FT — DNB Arsenal: ⚪ VOID
+2) Bayern 2-1 Inter · FT — BTTS Yes: ✅ WON
+3) Luton 0-0 Northampton · KO 21:30 — Under 2.5: ⏳ PENDING
+Next check: 21:15 GMT · ESPN
 ```
 
-Rule asserted: a VOID leg appends `1⚪` to the Progress line, and a void (not lost) leg keeps the acca PARTIAL rather than DEAD.
+Rule asserted: a void (not lost) leg keeps the acca PARTIAL rather than DEAD.
 
 ## Regression: unsupported market type
 
 ```text
-⚽️ Acca update -- 14:00 GMT
-Overall: ❔ UNVERIFIABLE — 0/1 settled, 0 lost
-Progress: 0✅ 0🟢 0⏳ 0❌ 1❔
-
-1) Arsenal vs Chelsea
-   Market: Player shots on target
-   Score: live score found; prop data unavailable
-   Status: ❔ UNVERIFIABLE
-   Source: BBC/SofaScore public score checked
-   Next: retry 14:15
-
+⚽️ Acca — 14:00 GMT · ❔ UNVERIFIABLE · 0/1 settled
+1) Arsenal vs Chelsea — Player shots on target: ❔ UNVERIFIABLE
 Note: market needs player-prop data not in basic public scores.
-Next check: 14:15 GMT
-Boundary: status only, no betting/cash-out advice.
+Next check: 14:15 GMT · ESPN
 ```
+
+## Regression: fallback source cited on the leg line
+
+```text
+⚽️ Acca — 15:45 CET · 🟢 LIVE · 0/1 settled
+1) Bayern 2-1 Dortmund · 68' — Over 2.5: 🟢 WINNING (via BBC)
+Next check: 16:00 CET · ESPN
+```
+
+Recurring Telegram updates are sent as the fenced `text` block itself, not as a loose paragraph, with no boundary footer.

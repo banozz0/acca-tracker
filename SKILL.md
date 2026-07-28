@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.4.0
+version: 2.5.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -114,6 +114,7 @@ Before creating a tracking job, show a preview and ask for explicit confirmation
 
 Stake/return: shown only if user provided it.
 Privacy: tracking jobs may store these match details until stopped or expired.
+Reports are status-only — no betting or cash-out advice.
 
 Start read-only tracking for this slip? Reply yes to create the job, or edit any leg first.
 ```
@@ -149,6 +150,7 @@ Scheduling guidance — window the cron to the actual match times; do not poll 2
 - Size `repeat` to cover through the **last** match night: `firings_per_window × match_nights` plus a small buffer (a 4-hour window ≈ 16 firings/night, so 3 nights ≈ 48).
 - If kickoff times differ a lot across days, widen the window or create one job per match-night cluster (each auto-expires when its repeat budget ends).
 - Never emit `*/15 * * * *` for a multi-day slip — it polls dead hours and burns the repeat budget before later games start.
+- Never schedule more often than every 15 minutes: `*/15` is the floor. Each firing costs model credits, and the change-detection line keeps unchanged runs silent anyway — a tighter interval only burns budget.
 - Include enough slip detail in the cron prompt for the job to run without chat history.
 - If structured API checks require terminal/code execution and that toolset is available, include it explicitly; otherwise use web-only source checks.
 
@@ -211,47 +213,44 @@ TIME-AWARENESS & EFFICIENCY:
 - The script only fetches this job's `RUN_DATES`; a leg shown as `future date, not checked` is genuinely upcoming — report it PENDING (it sits in the ⏳ count).
 - Header time: use the injected `CURRENT TIME`.
 
-WHEN TO SEND vs STAY SILENT (do not ping when nothing is happening):
+WHEN TO SEND vs STAY SILENT (send on change, not on schedule):
 - This runs as a scheduled cron. Suppress empty updates with the runtime's silent token — in Hermes, respond with exactly `[SILENT]` and nothing else — instead of sending a "nothing yet" message.
-- If `CURRENT TIME` is before every today-leg's kickoff, respond `[SILENT]` without querying.
-- After checking, only send a report when at least one today-leg is live (in-play) or has just settled. If nothing is live or newly settled, respond `[SILENT]`.
-- Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD).
+- The script prints a `CHANGE SINCE LAST RUN:` line. `NO` -> respond `[SILENT]`. A live match with an unchanged score is not news; the moving clock alone never justifies a message.
+- `YES` -> send a report, with one exception: if every changed leg is still `NOT STARTED` (schedule confirmations, first pre-kickoff check), respond `[SILENT]` — the user already got a confirmation at job creation.
+- Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD or WON). After the final all-settled report has been sent, later runs show no change and stay `[SILENT]` — never re-send a settled report.
 - Once the overall acca is DEAD, stop live-progress spam: respond `[SILENT]` on runs that only show remaining legs still in play. Send only when a remaining leg reaches its FINAL result (a brief settled-tally update) — the user already got the death notice on the run the killing leg settled.
 
-REPORT FORMAT (compact Telegram/mobile):
+REPORT FORMAT (compact Telegram/mobile — one line per leg):
 Return recurring tracker updates as one compact fenced text block. Put only the codeblock in the scheduled update unless a safety refusal is needed outside it.
 
 ```text
-⚽️ Acca update -- <HH:MM timezone>
-Overall: <emoji> <WON|LIVE|PARTIAL|PENDING|DEAD|UNVERIFIABLE> — <settled>/<total> settled, <lost> lost
-Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔
+⚽️ Acca — <HH:MM timezone> · <emoji> <WON|LIVE|PARTIAL|PENDING|DEAD|UNVERIFIABLE> · <settled>/<total> settled
+1) <Home> <score> <Away> · <FT / 45' / KO HH:MM> — <market>: <emoji> <STATUS>
+2) <Home> <score> <Away> · <FT / 45' / KO HH:MM> — <market>: <emoji> <STATUS>
+Next check: <HH:MM timezone> · ESPN
+```
 
-1) <Match>
-   Market: <short market wording>
-   Score: <score + match clock/status, or unavailable>
-   Status: <emoji> <WON / WINNING / PENDING / LOST / DEAD / VOID / UNVERIFIABLE>
-   Source: <source name or URL, or sources checked>
-   Next: <retry HH:MM / kickoff HH:MM / final / status only>
+Completed example:
 
-Note: <only if needed: one short source mismatch/failure caveat>
-
-Next check: <HH:MM timezone>
-Boundary: status only, no betting/cash-out advice.
+```text
+⚽️ Acca — 02:30 CEST · ✅ WON · 2/2 settled
+1) CRB 2-0 Vila Nova · FT — CRB win: ✅ WON
+2) Sport 1-1 Cuiabá · FT — Over 1.5: ✅ WON
+TRACKING COMPLETE · ESPN
 ```
 
 Formatting rules:
-- Keep each leg to at most 4-5 short lines.
-- Put caveats once at the bottom, not repeated in every leg.
+- ONE line per leg: teams + score, then clock/FT/kickoff time, then market and status. No per-leg Market/Score/Status/Source sub-lines.
+- No boundary footer. The status-only/no-advice boundary is stated once in the job-creation confirmation, not repeated in every update.
+- Source: the trailing `· ESPN` on the last line covers all script-fed legs. Only when a leg used a fallback source, append `(via BBC)` etc. to that leg's line.
+- Last line: `Next check: <HH:MM> · ESPN` while tracking continues (compute it from the actual cron interval — do not guess a shorter one), or `TRACKING COMPLETE · ESPN` when terminal conditions are actually met.
 - Leg-status emojis: ✅ won, 🟢 currently winning/live, ⏳ pending, ❌ lost/dead, ❔ unverifiable, ⚪ void.
 - Overall-status emojis: ✅ WON, 🟢 LIVE, 🟡 PARTIAL, ⏳ PENDING, ❌ DEAD, ❔ UNVERIFIABLE.
-- Progress counters use leg-status emojis ✅ 🟢 ⏳ ❌ ❔ (LOST and DEAD both count under ❌). Append a `<count>⚪` only when at least one leg is VOID.
-- Many-leg slips (5+ legs): keep the `Overall` + `Progress` header covering **all** legs, but print a per-leg block ONLY for legs that are live (WINNING) or settled (WON/LOST/DEAD/VOID) in the current window. **Never print a PENDING / not-started leg as its own block** — pending legs exist only as the ⏳ count. If nothing is live or settled yet (and you are sending at all), write a single line such as `No legs live or settled yet.` plus a `Next up:` line instead of any leg blocks. See `docs/compact-report-format.md`.
-- Output only the report content — never echo instruction markers (e.g. `‼️`), prompt headings, or meta-notes into the message.
+- Many-leg slips (5+ legs): add a `Progress: <count>✅ <count>🟢 <count>⏳ <count>❌ <count>❔` line under the header (LOST and DEAD both count under ❌; append `<count>⚪` only when a leg is VOID), and print leg lines ONLY for legs that are live or settled — pending legs exist only in the counts, with one `Next up: <match> KO <HH:MM>` line. See `docs/compact-report-format.md`.
 - A leg that is live but level/behind is still `🟢 LIVE` overall (the leg is `PENDING`); do not downgrade the overall to `PARTIAL` just because a live leg is not yet winning.
-- Include a source/citation for each leg.
-- Include Next check when continuing and make the next retry time explicit.
+- Caveats (source mismatch, unverifiable reason): one short `Note:` line above the last line, never repeated per leg.
+- Output only the report content — never echo instruction markers (e.g. `‼️`), prompt headings, or meta-notes into the message.
 - Keep most lines under ~72 characters for mobile scanning.
-- Preserve source lines and the next-check line inside the fenced text block.
 - Use TRACKING COMPLETE only when terminal conditions are actually met.
 ````
 

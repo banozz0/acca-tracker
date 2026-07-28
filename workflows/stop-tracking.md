@@ -10,3 +10,5 @@ When the user asks to stop acca tracking:
 6. State that no further scheduled updates will be sent.
 
 Do not guess job IDs. Always list before removing.
+
+If a per-job score script was created (`~/.hermes/scripts/acca-<id>.py`), remove it and its `.state.json` sidecar together with the job.
