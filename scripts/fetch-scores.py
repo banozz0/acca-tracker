@@ -89,19 +89,32 @@ def team_level(query, name):
 
 
 def fetch(sport, date):
-    """Return (events, error) for one sport+date; never raises."""
+    """Return (events, error) for one sport+date; never raises.
+
+    MMA cards are one event holding many fights: each fight (competition) is
+    flattened into its own event-shaped dict so lookup() works unchanged.
+    """
     url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/scoreboard?dates={date}"
     try:
         req = urllib.request.Request(url, headers=UA)
         with urllib.request.urlopen(req, timeout=25) as r:
-            return json.load(r).get("events", []), None
+            events = json.load(r).get("events", [])
     except Exception as e:
         return [], str(e)
+    if sport.startswith("mma"):
+        events = explode_fights(events)
+    return events, None
+
+
+def explode_fights(events):
+    """One MMA card event -> one event-shaped dict per fight."""
+    return [{"competitions": [c], "status": c.get("status", {})}
+            for e in events for c in e.get("competitions", [])]
 
 
 def competitor_names(c):
-    t = c.get("team", {})
-    return [t.get("displayName", ""), t.get("shortDisplayName", "")]
+    side = c.get("team") or c.get("athlete") or {}
+    return [side.get("displayName", ""), side.get("shortDisplayName", "")]
 
 
 def lookup(events, home, away):
@@ -138,14 +151,27 @@ def lookup(events, home, away):
         return {s.get("name"): s.get("displayValue")
                 for s in c.get("statistics", []) if s.get("name") in STAT_FIELDS}
 
+    state = st.get("type", {}).get("state", "")
+
+    def score(c):
+        if c.get("score") is not None:
+            return c.get("score")
+        if state == "post":  # fight: no score, winner flag instead
+            return "W" if c.get("winner") else "L"
+        return "-"
+
+    winner = next((competitor_names(c)[0] for c in (hc, ac)
+                   if state == "post" and c.get("winner")), None)
     return {
-        "state": st.get("type", {}).get("state", ""),
+        "state": state,
         "desc": st.get("type", {}).get("description", ""),
         "clock": st.get("displayClock", ""),
-        "home_score": hc.get("score", "?"),
-        "away_score": ac.get("score", "?"),
-        "espn_home": hc.get("team", {}).get("displayName", "?"),
-        "espn_away": ac.get("team", {}).get("displayName", "?"),
+        "period": st.get("period"),
+        "home_score": score(hc),
+        "away_score": score(ac),
+        "espn_home": competitor_names(hc)[0] or "?",
+        "espn_away": competitor_names(ac)[0] or "?",
+        "winner": winner,
         "weak": weakest <= 1,
         "home_stats": stats(hc),
         "away_stats": stats(ac),
@@ -191,10 +217,14 @@ def main():
             continue
         tag = {"pre": "NOT STARTED", "in": "LIVE", "post": "FINISHED"}.get(r["state"], r["state"].upper())
         clk = f" {r['clock']}" if r["clock"] and r["state"] == "in" else ""
+        if clk and sport.startswith("mma") and r["period"]:
+            clk = f" R{r['period']} {r['clock']}"
         stats = stats_line(r, market)
         snapshot[str(leg)] = f"{tag} {r['home_score']}-{r['away_score']}" + (f" [{stats}]" if stats else "")
         line = (f"  Leg {leg}: {home} {r['home_score']}-{r['away_score']} {away} "
                 f"[{date}] -> {tag} ({r['desc']}){clk} | market: {market}")
+        if r["winner"]:
+            line += f" | winner: {r['winner']}"
         if stats:
             line += f" | stats: {stats}"
         elif any(k in market.lower() for k in STAT_KEYWORDS):

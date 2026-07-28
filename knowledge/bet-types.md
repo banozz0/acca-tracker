@@ -26,6 +26,16 @@ ESPN's scoreboard feed carries live per-team stats for most fixtures (`wonCorner
 
 Status logic: over line already exceeded live -> `WINNING` (effectively secured, confirm at FT); under line already exceeded live -> `DEAD`; otherwise `PENDING` while live, and the FT stats decide `WON`/`LOST`. If the feed has no stats for the fixture (the script prints `stats: not in feed`), mark the leg `UNVERIFIABLE` — never guess stats, and never settle a stat market before full time.
 
+## UFC fight winner
+
+UFC legs use the `mma/ufc` sport path with fighter names in the home/away slots. The script reports `W-L` and an explicit `winner:` name once a fight is Final.
+
+- `NOT STARTED` -> `PENDING`.
+- `LIVE` -> `PENDING`, always. There is no reliable "currently winning" signal mid-fight; never mark a live fight `WINNING`.
+- `FINISHED` + `winner:` matches the selection -> `WON`; matches the opponent -> `LOST`.
+- `FINISHED` with no `winner:` (draw/no-contest) -> `UNVERIFIABLE` until a fallback source confirms the result type; most books void on NC.
+- Method/round/prop markets (KO, submission, round betting) are unsupported — `UNVERIFIABLE`.
+
 ## Limited or unsupported
 
 These often need data not available from public score/stat feeds:

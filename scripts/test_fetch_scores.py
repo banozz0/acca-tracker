@@ -76,6 +76,31 @@ class TestLookup(unittest.TestCase):
         self.assertIsNone(fs.lookup([event("Arsenal", "Chelsea", "2", "0")], "Spain", "Sweden"))
 
 
+def fight(a, b, winner=None, state="post", desc="Final", period=3, clock="5:00"):
+    """One fight as it appears inside an MMA card's competitions[]."""
+    def comp(name, won):
+        return {"athlete": {"displayName": name, "shortDisplayName": name.split()[-1]},
+                "winner": won}
+    return {"competitors": [comp(a, winner == a), comp(b, winner == b)],
+            "status": {"period": period, "displayClock": clock,
+                       "type": {"state": state, "description": desc}}}
+
+
+class TestMMA(unittest.TestCase):
+    def test_explode_and_winner(self):
+        card = [{"competitions": [fight("Magomed Ankalaev", "Volkan Oezdemir",
+                                        winner="Magomed Ankalaev"),
+                 fight("Cody Gibson", "Abdul Hussein", state="pre", desc="Scheduled")]}]
+        events = fs.explode_fights(card)
+        self.assertEqual(len(events), 2)
+        r = fs.lookup(events, "Ankalaev", "Oezdemir")
+        self.assertEqual(r["winner"], "Magomed Ankalaev")
+        self.assertEqual((r["home_score"], r["away_score"]), ("W", "L"))
+        pre = fs.lookup(events, "Gibson", "Hussein")
+        self.assertIsNone(pre["winner"])
+        self.assertEqual((pre["home_score"], pre["away_score"]), ("-", "-"))
+
+
 class TestFetchErrorIsolation(unittest.TestCase):
     def setUp(self):
         # fresh change-detection state per test

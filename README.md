@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.6.0
+Version: 2.7.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
@@ -103,6 +103,10 @@ Best supported:
 - Basic handicap where the line and settlement rule are clear
 - Corners, cards, and shots over/under — ESPN's feed carries live per-team stats for most fixtures; legs where the stat is missing are marked `UNVERIFIABLE` instead of guessed
 
+Also supported:
+
+- UFC fight winner — fights settle from ESPN's explicit winner flag; live fights stay pending (no fake "currently winning" mid-round)
+
 Experimental:
 
 - Basketball team markets (moneyline/totals) via the same ESPN feed (`basketball/nba`, `basketball/wnba`)
@@ -111,10 +115,11 @@ Limited or unsupported unless reliable source data is available:
 
 - Offsides, possession, player props
 - First/anytime goalscorer
+- UFC method/round props (KO, submission, round betting)
 - Complex bet builders
 - Team to qualify / lift trophy / aggregate markets
 - Bookmaker bonuses, boosts, insurance, or settlement-specific offers
-- UFC/MMA and F1 (different ESPN data shape — on the roadmap, not supported yet)
+- F1 (different ESPN data shape — on the roadmap, not supported yet)
 
 See [`knowledge/bet-types.md`](knowledge/bet-types.md).
 

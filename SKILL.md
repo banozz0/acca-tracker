@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
-description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.6.0
+description: "Use when tracking an already-placed accumulator/parlay — football markets, UFC fight winners, basketball team legs: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
+version: 2.7.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -59,6 +59,7 @@ Officially supported for public use:
 - Simple team goals over/under when score data is enough
 - Basic handicap only when the line and settlement rule are clear
 - Corners, cards, and shots over/under lines — the ESPN feed carries live per-team stats for most fixtures; the script prints them as a `stats:` line for these legs. If the script prints `stats: not in feed`, the leg is UNVERIFIABLE. Never settle a stat market before full time.
+- UFC fight winner (`mma/ufc` sport path) — settled from the finished fight's `winner:` name; live fights stay PENDING.
 
 Treat these as **limited or unsupported unless reliable source data is available**:
 
@@ -139,7 +140,8 @@ prompt: <self-contained tracking prompt>
 **Scheduled agents are time-blind and fetch unreliably.** Hermes does not inject the current time, and asking the model to fetch + parse a 50-event ESPN JSON every run is unreliable — it intermittently skips the call and hallucinates a plausible score, which surfaces as frozen or backwards clocks and vanishing legs. Fix both with a **pre-run score script** whose stdout is injected into the prompt each run:
 
 - Copy `scripts/fetch-scores.py` to the profile's scripts dir — `~/.hermes/profiles/<profile>/scripts/acca-<id>.py` (Hermes resolves `--script` names against the profile scripts dir, not `~/.hermes/scripts`) — fill in its `SLIP` (leg, teams, date, market wording, plus an optional ESPN sport path for non-football legs, e.g. `basketball/nba`) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`. If that dir is managed by a sync/backup that deletes unmanaged files, add the script to its allowlist or the job will fail with "Script not found".
-- Basketball team markets (moneyline, totals) work through the same feed via the sport path — experimental. UFC/MMA and F1 are not supported yet: their ESPN data is event cards / race classifications, not team-vs-team, and needs different matching and market logic.
+- UFC fight-winner legs use `"mma/ufc"` as the sport path (fighter names in the home/away slots). The script flattens the card into fights and reports `W-L` plus an explicit `winner:` name on finished fights. A live fight is always PENDING — never call a fight WINNING mid-round. Settle only from the `winner:` name; a finished fight with no winner (draw/no-contest) is UNVERIFIABLE unless a fallback source confirms the result type.
+- Basketball team markets (moneyline, totals) work through the same feed via the sport path (`basketball/nba`, `basketball/wnba`) — experimental. F1 is not supported yet: race classifications need different matching and market logic.
 - Each run it prints a `CURRENT TIME:` line and an authoritative `LIVE SCORES:` block — real ESPN state (`NOT STARTED` / `LIVE` / `FINISHED`) and score per leg. **The agent reads those numbers; it does not fetch scores itself.** This is what keeps scores current and consistent across runs, and it lets a small/cheap model run the tracker reliably.
 - The script searches all `RUN_DATES` together because ESPN files a late-evening European kickoff under the previous US calendar date.
 
@@ -218,7 +220,7 @@ TIME-AWARENESS & EFFICIENCY:
 WHEN TO SEND vs STAY SILENT (send on change, not on schedule):
 - This runs as a scheduled cron. Suppress empty updates with the runtime's silent token — in Hermes, respond with exactly `[SILENT]` and nothing else — instead of sending a "nothing yet" message.
 - The script prints a `CHANGE SINCE LAST RUN:` line. `NO` -> respond `[SILENT]`. A live match with an unchanged score is not news; the moving clock alone never justifies a message.
-- `YES` -> send a report, with one exception: if every changed leg is still `NOT STARTED` (schedule confirmations, first pre-kickoff check), respond `[SILENT]` — the user already got a confirmation at job creation.
+- `YES` -> send a report, with two exceptions. (1) If every changed leg is still `NOT STARTED` (schedule confirmations, first pre-kickoff check), respond `[SILENT]` — the user already got a confirmation at job creation. (2) If the only movement is stat values (corners/cards/shots) and judging the old vs new values against the leg's market leaves every leg's status unchanged (e.g. corners 3-2 -> 4-2 with an over-8.5 leg still PENDING), respond `[SILENT]` — a corner that doesn't flip a leg is not news. Goals/score changes always count as news for that leg's match.
 - Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD or WON). After the final all-settled report has been sent, later runs show no change and stay `[SILENT]` — never re-send a settled report.
 - Once the overall acca is DEAD, stop live-progress spam: respond `[SILENT]` on runs that only show remaining legs still in play. Send only when a remaining leg reaches its FINAL result (a brief settled-tally update) — the user already got the death notice on the run the killing leg settled.
 
