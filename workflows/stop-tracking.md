@@ -11,4 +11,4 @@ When the user asks to stop acca tracking:
 
 Do not guess job IDs. Always list before removing.
 
-If a per-job score script was created (`~/.hermes/scripts/acca-<id>.py`), remove it and its `.state.json` sidecar together with the job.
+If a per-job score script was created (`~/.hermes/profiles/<profile>/scripts/acca-<id>.py`), remove it and its `.state.json` sidecar together with the job.

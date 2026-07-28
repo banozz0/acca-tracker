@@ -6,11 +6,9 @@ Use this reference when refreshing or reinstalling `acca-tracker` from its sourc
 
 Install into the active profile's skill tree, not the default/global skill directory unless that is explicitly intended.
 
-For Harry:
-
 ```bash
 # Run from the skill's source directory (a clone or download of acca-tracker).
-PROFILE=harry   # change to your Hermes profile name
+PROFILE=default   # change to your Hermes profile name
 mkdir -p ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker
 rsync -a --delete --exclude '.git' ./ \
   ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker/
@@ -41,7 +39,8 @@ Before installing or updating the profile copy, run `python3 scripts/validate.py
 ```bash
 set -e
 # Validates the installed copy. Optionally also validates a source clone if SRC is set.
-INST="${INST:-$HOME/.hermes/profiles/harry/skills/acca-tracker}"
+PROFILE="${PROFILE:-default}"
+INST="${INST:-$HOME/.hermes/profiles/$PROFILE/skills/acca-tracker}"
 SRC="${SRC:-}"
 python3 - "$INST" "$SRC" <<'PY'
 import sys, re
@@ -72,5 +71,5 @@ for root in roots:
     assert not missing, missing
     print('OK', root)
 PY
-hermes --profile harry skills list | grep -i 'acca-tracker'
+hermes --profile "$PROFILE" skills list | grep -i 'acca-tracker'
 ```

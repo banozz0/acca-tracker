@@ -7,10 +7,12 @@ a plausible score, which shows up as frozen or backwards clocks. This script
 does the fetch deterministically and prints clean lines that Hermes injects into
 the prompt, so the model only has to read, judge, and format authoritative data.
 
-Usage: copy to ~/.hermes/scripts/acca-<id>.py, fill in SLIP + RUN_DATES for the
-job, then create the cron job with `--script acca-<id>.py`. Its stdout is
-prepended to the tracking prompt each run (and it also emits CURRENT TIME, so it
-replaces a separate now.sh).
+Usage: copy to your profile's scripts dir —
+~/.hermes/profiles/<profile>/scripts/acca-<id>.py (Hermes resolves `--script`
+names against the profile scripts dir) — fill in SLIP + RUN_DATES for the job,
+then create the cron job with `--script acca-<id>.py`. Its stdout is prepended
+to the tracking prompt each run (and it also emits CURRENT TIME, so it replaces
+a separate now.sh).
 """
 import json, os, urllib.request, datetime, unicodedata
 

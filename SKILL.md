@@ -137,7 +137,7 @@ prompt: <self-contained tracking prompt>
 
 **Scheduled agents are time-blind and fetch unreliably.** Hermes does not inject the current time, and asking the model to fetch + parse a 50-event ESPN JSON every run is unreliable — it intermittently skips the call and hallucinates a plausible score, which surfaces as frozen or backwards clocks and vanishing legs. Fix both with a **pre-run score script** whose stdout is injected into the prompt each run:
 
-- Copy `scripts/fetch-scores.py` to `~/.hermes/scripts/acca-<id>.py`, fill in its `SLIP` (leg, teams, date, market wording) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`.
+- Copy `scripts/fetch-scores.py` to the profile's scripts dir — `~/.hermes/profiles/<profile>/scripts/acca-<id>.py` (Hermes resolves `--script` names against the profile scripts dir, not `~/.hermes/scripts`) — fill in its `SLIP` (leg, teams, date, market wording) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`. If that dir is managed by a sync/backup that deletes unmanaged files, add the script to its allowlist or the job will fail with "Script not found".
 - Each run it prints a `CURRENT TIME:` line and an authoritative `LIVE SCORES:` block — real ESPN state (`NOT STARTED` / `LIVE` / `FINISHED`) and score per leg. **The agent reads those numbers; it does not fetch scores itself.** This is what keeps scores current and consistent across runs, and it lets a small/cheap model run the tracker reliably.
 - The script searches all `RUN_DATES` together because ESPN files a late-evening European kickoff under the previous US calendar date.
 

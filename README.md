@@ -33,11 +33,12 @@ It helps a Hermes agent parse a football betting slip, confirm the legs with the
 
 Copy the entire skill directory, not just `SKILL.md`; the skill references `docs/`, `knowledge/`, `workflows/`, `templates/`, and `examples/`.
 
-For Harry's active profile, install into the profile-local skills tree:
+Install into your active profile's skills tree:
 
 ```bash
-# Run from the skill's source directory (a clone or download of acca-tracker).
-PROFILE=harry   # change to your Hermes profile name
+git clone https://github.com/banozz0/acca-tracker.git
+cd acca-tracker
+PROFILE=default   # change to your Hermes profile name
 mkdir -p ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker
 rsync -a --delete --exclude '.git' ./ \
   ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker/
@@ -59,11 +60,11 @@ The same validation runs in CI on every push (`.github/workflows/validate.yml`).
 ## Verify after install
 
 ```bash
-test -f ~/.hermes/profiles/harry/skills/acca-tracker/SKILL.md
-python3 - <<'PY'
+test -f ~/.hermes/profiles/"$PROFILE"/skills/acca-tracker/SKILL.md
+python3 - "$PROFILE" <<'PY'
 from pathlib import Path
-import re
-p = Path.home()/'.hermes/profiles/harry/skills/acca-tracker/SKILL.md'
+import re, sys
+p = Path.home()/f'.hermes/profiles/{sys.argv[1]}/skills/acca-tracker/SKILL.md'
 s = p.read_text()
 assert s.startswith('---')
 m = re.search(r'\n---\s*\n', s[3:])
@@ -74,7 +75,7 @@ assert 'description:' in frontmatter
 assert s[m.end()+3:].strip()
 print('OK', p)
 PY
-hermes --profile harry tools list
+hermes --profile "$PROFILE" tools list
 ```
 
 ## Required Hermes capabilities
