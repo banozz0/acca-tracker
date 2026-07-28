@@ -18,7 +18,7 @@ spec.loader.exec_module(fs)
 
 
 def event(home, away, home_score, away_score, state="post", desc="Full Time", clock="",
-          home_corners=None, away_corners=None):
+          home_corners=None, away_corners=None, period=None):
     """ESPN-shaped event; ESPN order is away-first surprisingly often, so the
     first competitor here is the AWAY team to prove orientation is by name."""
     def comp(name, score, corners):
@@ -30,7 +30,8 @@ def event(home, away, home_score, away_score, state="post", desc="Full Time", cl
         return c
     return {"competitions": [{"competitors": [comp(away, away_score, away_corners),
                                               comp(home, home_score, home_corners)]}],
-            "status": {"type": {"state": state, "description": desc}, "displayClock": clock}}
+            "status": {"type": {"state": state, "description": desc}, "displayClock": clock,
+                       **({"period": period} if period else {})}}
 
 
 class TestTeamLevel(unittest.TestCase):
@@ -173,6 +174,24 @@ class TestFetchErrorIsolation(unittest.TestCase):
             fs.SLIP, fs.RUN_DATES, fs.fetch = old
         self.assertEqual(seen, ["basketball/nba"])
         self.assertIn("Lakers 102-99 Celtics", out.getvalue())
+
+    def test_halftime_marker_triggers_change(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]
+        self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Arsenal", "Chelsea", "0", "0", state="in", desc="First Half", clock="44'")], None)})
+        out = self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Arsenal", "Chelsea", "0", "0", state="in", desc="Halftime")], None)})
+        self.assertIn("CHANGE SINCE LAST RUN: YES — Leg 1: LIVE 0-0 -> LIVE HT 0-0", out)
+
+    def test_ufc_round_change_triggers(self):
+        slip = [(1, "Ankalaev", "Guskov", "20260101", "Ankalaev to win", "mma/ufc")]
+        self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Ankalaev", "Guskov", None, None, state="in", desc="In Progress",
+            clock="2:11", period=1)], None)})
+        out = self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Ankalaev", "Guskov", None, None, state="in", desc="In Progress",
+            clock="4:58", period=2)], None)})
+        self.assertIn("LIVE R1 --- -> LIVE R2 ---", out)
 
     def test_change_detection_across_runs(self):
         slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]

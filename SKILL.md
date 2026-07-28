@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed accumulator/parlay — football markets, UFC fight winners, basketball team legs: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.7.0
+version: 2.8.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -209,7 +209,7 @@ TASK:
 3. If a leg carries a `WEAK NAME MATCH` warning, verify the named ESPN fixture really is the slip's game (competition + date) before using its score; if it is the wrong fixture, treat the leg as NOT FOUND and use the fallback check instead.
 4. Preserve original slip team names in the report; cite `ESPN` (or the fallback source actually used) per leg.
 5. Judge each leg from the injected state + score against its `market:` wording (see `knowledge/bet-types.md`). Example for match result: `NOT STARTED` -> PENDING; `LIVE` & selection leading -> WINNING; `LIVE` & level/behind -> PENDING; `FINISHED` & selection won -> WON; `FINISHED` & draw/opponent -> LOST. Postponed/abandoned/push -> VOID; missing/ambiguous -> UNVERIFIABLE (non-terminal). Corner/card/shot legs are judged from the injected `stats:` values only (`stats: not in feed` -> UNVERIFIABLE); never settle them before FINISHED.
-6. Overall status: WON / LIVE / PARTIAL / PENDING / DEAD / UNVERIFIABLE. If any leg is LOST/DEAD, overall is DEAD (keep the rest as information only). A leg that is live but not yet winning keeps the overall `LIVE`, not `PARTIAL`.
+6. Overall status: WON / LIVE / PARTIAL / PENDING / DEAD / UNVERIFIABLE, with precedence DEAD > WON > LIVE > PARTIAL > PENDING > UNVERIFIABLE. If any leg is LOST/DEAD, overall is DEAD (keep the rest as information only). A leg that is live but not yet winning keeps the overall `LIVE`, not `PARTIAL`. An UNVERIFIABLE leg alone never downgrades the overall while other legs are live or settled — it shows in the ❔ count and a `Note:` line; the overall is `UNVERIFIABLE` only when no leg is live and nothing else describes the acca.
 7. Include TRACKING COMPLETE only when every leg is terminal/settled, or the scheduler says this is the final/max-repeat run. Never complete because a lookup failed or a leg was unverifiable.
 
 TIME-AWARENESS & EFFICIENCY:
@@ -217,11 +217,17 @@ TIME-AWARENESS & EFFICIENCY:
 - The script only fetches this job's `RUN_DATES`; a leg shown as `future date, not checked` is genuinely upcoming — report it PENDING (it sits in the ⏳ count).
 - Header time: use the injected `CURRENT TIME`.
 
-WHEN TO SEND vs STAY SILENT (send on change, not on schedule):
+WHEN TO SEND vs STAY SILENT (send on events, not on schedule):
 - This runs as a scheduled cron. Suppress empty updates with the runtime's silent token — in Hermes, respond with exactly `[SILENT]` and nothing else — instead of sending a "nothing yet" message.
-- The script prints a `CHANGE SINCE LAST RUN:` line. `NO` -> respond `[SILENT]`. A live match with an unchanged score is not news; the moving clock alone never justifies a message.
-- `YES` -> send a report, with two exceptions. (1) If every changed leg is still `NOT STARTED` (schedule confirmations, first pre-kickoff check), respond `[SILENT]` — the user already got a confirmation at job creation. (2) If the only movement is stat values (corners/cards/shots) and judging the old vs new values against the leg's market leaves every leg's status unchanged (e.g. corners 3-2 -> 4-2 with an over-8.5 leg still PENDING), respond `[SILENT]` — a corner that doesn't flip a leg is not news. Goals/score changes always count as news for that leg's match.
-- Always send when a leg settles (WON/LOST/DEAD/VOID) or the overall status changes (e.g. the acca goes DEAD or WON). After the final all-settled report has been sent, later runs show no change and stay `[SILENT]` — never re-send a settled report.
+- The script prints a `CHANGE SINCE LAST RUN:` line. `NO` -> respond `[SILENT]`, always. A live match with nothing new is not news; the moving clock alone never justifies a message.
+- `YES` -> send only if the diff contains a reportable event for some leg:
+  - a goal / score change in that leg's match,
+  - halftime (`HT` marker appears) or full time (`-> FINISHED`),
+  - a corner/card/shot value change — only on a leg whose market is that stat,
+  - a new fight round (`R2` -> `R3`) or fight result on a UFC leg,
+  - a leg settling (WON/LOST/DEAD/VOID) or the overall status changing.
+- Not reportable -> `[SILENT]`: kickoff alone (`NOT STARTED -> LIVE 0-0` with nothing else), first-check baselines where every leg is still `NOT STARTED`, and any stat movement on legs that did not bet that stat.
+- After the final all-settled report has been sent, later runs show no change and stay `[SILENT]` — never re-send a settled report.
 - Once the overall acca is DEAD, stop live-progress spam: respond `[SILENT]` on runs that only show remaining legs still in play. Send only when a remaining leg reaches its FINAL result (a brief settled-tally update) — the user already got the death notice on the run the killing leg settled.
 
 REPORT FORMAT (compact Telegram/mobile — one line per leg):

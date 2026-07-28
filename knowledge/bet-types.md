@@ -105,7 +105,9 @@ Use `UNVERIFIABLE` unless reliable source data is available.
 - `PARTIAL` — at least one leg is settled/won/void and at least one remaining leg is pending/live/unverifiable, with no lost/dead leg.
 - `PENDING` — no leg is lost/dead, and all unresolved legs are not started or awaiting data.
 - `DEAD` — at least one leg is lost or dead.
-- `UNVERIFIABLE` — one or more required legs cannot be verified from available public data; this is non-terminal unless the scheduler expires or the user stops tracking.
+- `UNVERIFIABLE` — no leg is live or lost, and one or more required legs cannot be verified from available public data; this is non-terminal unless the scheduler expires or the user stops tracking.
+
+Precedence when several apply: `DEAD` > `WON` > `LIVE` > `PARTIAL` > `PENDING` > `UNVERIFIABLE`. A single unverifiable leg never downgrades an otherwise live/partial acca — it stays visible in the ❔ count with a short note.
 
 ## Reporting rule
 

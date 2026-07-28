@@ -219,8 +219,16 @@ def main():
         clk = f" {r['clock']}" if r["clock"] and r["state"] == "in" else ""
         if clk and sport.startswith("mma") and r["period"]:
             clk = f" R{r['period']} {r['clock']}"
+        # Phase markers make halftime and fight-round transitions count as
+        # changes (the user wants an update at HT / each new round).
+        phase = ""
+        if r["state"] == "in":
+            if sport.startswith("mma") and r["period"]:
+                phase = f" R{r['period']}"
+            elif "halftime" in r["desc"].lower():
+                phase = " HT"
         stats = stats_line(r, market)
-        snapshot[str(leg)] = f"{tag} {r['home_score']}-{r['away_score']}" + (f" [{stats}]" if stats else "")
+        snapshot[str(leg)] = f"{tag}{phase} {r['home_score']}-{r['away_score']}" + (f" [{stats}]" if stats else "")
         line = (f"  Leg {leg}: {home} {r['home_score']}-{r['away_score']} {away} "
                 f"[{date}] -> {tag} ({r['desc']}){clk} | market: {market}")
         if r["winner"]:

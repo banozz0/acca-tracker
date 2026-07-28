@@ -43,8 +43,9 @@ Rules:
 The pre-run script prints `CHANGE SINCE LAST RUN: YES/NO` by comparing each leg's state+score to the previous run:
 
 - `NO` -> respond with the runtime's silent token (`[SILENT]` in Hermes). A live match whose score has not moved is not news; the match clock alone never justifies a message.
-- `YES` -> send, unless every changed leg is still `NOT STARTED` (schedule confirmations are covered by the job-creation message), or the only movement is stat values that leave every leg's judged status unchanged — a corner that doesn't flip an over/under leg is not news. Goals always count.
-- Always send when a leg settles or the overall status changes; after the final all-settled report, later runs show no change and stay silent — never re-send a settled report.
+- `YES` -> send only for reportable events: a goal in a leg's match, halftime or full time, a corner/card/shot change on a leg that bet that stat, a new UFC round or fight result, a leg settling, or the overall status changing.
+- Not reportable -> silent: kickoff alone, first-check all-NOT-STARTED baselines, and stat movement on legs that did not bet that stat.
+- After the final all-settled report, later runs show no change and stay silent — never re-send a settled report.
 
 ## Many-leg slips (5+ legs)
 
