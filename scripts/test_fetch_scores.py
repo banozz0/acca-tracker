@@ -17,13 +17,19 @@ fs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fs)
 
 
-def event(home, away, home_score, away_score, state="post", desc="Full Time", clock=""):
+def event(home, away, home_score, away_score, state="post", desc="Full Time", clock="",
+          home_corners=None, away_corners=None):
     """ESPN-shaped event; ESPN order is away-first surprisingly often, so the
     first competitor here is the AWAY team to prove orientation is by name."""
-    def comp(name, score):
-        return {"team": {"displayName": name, "shortDisplayName": name.split()[0]},
-                "score": score}
-    return {"competitions": [{"competitors": [comp(away, away_score), comp(home, home_score)]}],
+    def comp(name, score, corners):
+        c = {"team": {"displayName": name, "shortDisplayName": name.split()[0]},
+             "score": score}
+        if corners is not None:
+            c["statistics"] = [{"name": "wonCorners", "displayValue": str(corners)},
+                               {"name": "yellowCards", "displayValue": "1"}]
+        return c
+    return {"competitions": [{"competitors": [comp(away, away_score, away_corners),
+                                              comp(home, home_score, home_corners)]}],
             "status": {"type": {"state": state, "description": desc}, "displayClock": clock}}
 
 
@@ -78,7 +84,7 @@ class TestFetchErrorIsolation(unittest.TestCase):
     def run_main(self, slip, run_dates, fetch_results):
         old = fs.SLIP, fs.RUN_DATES, fs.fetch
         fs.SLIP, fs.RUN_DATES = slip, run_dates
-        fs.fetch = lambda d: fetch_results[d]
+        fs.fetch = lambda sport, d: fetch_results[d]
         out = io.StringIO()
         try:
             with redirect_stdout(out):
@@ -99,8 +105,49 @@ class TestFetchErrorIsolation(unittest.TestCase):
         self.assertIn("FINISHED (Full Time)", out)
         self.assertIn("market: Arsenal win", out)
         self.assertIn("Leg 2: Spain vs Sweden [20260102] -> ESPN fetch failed", out)
-        self.assertIn("WARNING: ESPN fetch failed for 20260102: HTTP 500", out)
+        self.assertIn("WARNING: ESPN fetch failed for soccer/all 20260102: HTTP 500", out)
         self.assertIn("Leg 3: Belgium vs Egypt [20260103] -> future date, not checked", out)
+
+    def test_stat_market_prints_and_diffs_stats(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Total corners over 8.5")]
+        dates = ["20260101"]
+        out1 = self.run_main(slip, dates, {"20260101": ([event(
+            "Arsenal", "Chelsea", "1", "0", state="in", desc="First Half", clock="30'",
+            home_corners=4, away_corners=2)], None)})
+        self.assertIn("stats: corners 4-2, yellows 1-1", out1)
+        # score unchanged but a new corner -> CHANGE YES
+        out2 = self.run_main(slip, dates, {"20260101": ([event(
+            "Arsenal", "Chelsea", "1", "0", state="in", desc="First Half", clock="38'",
+            home_corners=5, away_corners=2)], None)})
+        self.assertIn("CHANGE SINCE LAST RUN: YES", out2)
+
+    def test_non_stat_market_omits_stats(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]
+        out = self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Arsenal", "Chelsea", "1", "0", home_corners=4, away_corners=2)], None)})
+        self.assertNotIn("stats:", out)
+
+    def test_stat_market_without_feed_stats_flags_unverifiable(self):
+        slip = [(1, "Arsenal", "Chelsea", "20260101", "Over 4.5 cards")]
+        out = self.run_main(slip, ["20260101"], {"20260101": ([event(
+            "Arsenal", "Chelsea", "1", "0")], None)})
+        self.assertIn("stats: not in feed", out)
+
+    def test_sport_path_routes_fetch(self):
+        seen = []
+        old = fs.SLIP, fs.RUN_DATES, fs.fetch
+        fs.SLIP = [(1, "Lakers", "Celtics", "20260101", "Lakers moneyline", "basketball/nba")]
+        fs.RUN_DATES = ["20260101"]
+        fs.fetch = lambda sport, d: (seen.append(sport),
+                                     ([event("Lakers", "Celtics", "102", "99")], None))[1]
+        out = io.StringIO()
+        try:
+            with redirect_stdout(out):
+                fs.main()
+        finally:
+            fs.SLIP, fs.RUN_DATES, fs.fetch = old
+        self.assertEqual(seen, ["basketball/nba"])
+        self.assertIn("Lakers 102-99 Celtics", out.getvalue())
 
     def test_change_detection_across_runs(self):
         slip = [(1, "Arsenal", "Chelsea", "20260101", "Arsenal win")]

@@ -56,6 +56,9 @@ Per event, read:
 - `status.type.description` → e.g. `Scheduled`, `First Half`, `Halftime`, `In Progress`, `Full Time`.
 - `status.displayClock` → live match minute, e.g. `45'+2'`.
 - `competitions[0].competitors[].score` plus `...team.abbreviation` / `displayName` → score and team matching.
+- `competitions[0].competitors[].statistics` → live per-team stats for most fixtures: `wonCorners`, `yellowCards`, `redCards`, `totalShots`, `shotsOnTarget`, `foulsCommitted` — this is what settles corner/card/shot markets. The `summary?event=<id>` endpoint (works with the `all` league path) has the same stats as a cross-check.
+
+Other sports use the same URL shape (`sports/basketball/nba/scoreboard`, `sports/basketball/wnba/scoreboard`) with the same event structure — basketball team markets work through the identical flow. `mma/ufc` and `racing/f1` endpoints exist but return event cards / race fields, not team-vs-team events; the skill does not support them yet.
 
 Match by both teams + date, and confirm `state` and score before settling a leg. If the exact league code is unknown, query `all` for the date and filter by team names.
 

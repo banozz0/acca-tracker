@@ -17,17 +17,26 @@ a separate now.sh).
 import json, os, urllib.request, datetime, unicodedata
 
 # ===== per-job config — the agent fills these in at job-creation time =====
-# (leg number, home, away, kickoff date 'YYYYMMDD', market wording from the slip)
+# (leg number, home, away, kickoff date 'YYYYMMDD', market wording from the slip
+#  [, ESPN sport path — optional, defaults to "soccer/all"; e.g. "basketball/nba"])
 SLIP = [
     (1, "Germany", "Curaçao", "20260614", "Match result: Germany win"),
     (2, "Netherlands", "Japan", "20260614", "Match result: Netherlands win"),
     (3, "Spain", "Cape Verde", "20260615", "Match result: Spain win"),
     (4, "Sweden", "Tunisia", "20260615", "Over 2.5 goals"),
-    (5, "Belgium", "Egypt", "20260615", "BTTS: yes"),
+    (5, "Belgium", "Egypt", "20260615", "Total corners over 8.5"),
 ]
 # Dates this job should actually fetch: its RUN DATE + any spillover prev date.
 RUN_DATES = ["20260615", "20260614"]
 # ==========================================================================
+
+DEFAULT_SPORT = "soccer/all"
+# Team stats ESPN's scoreboard carries per competitor; printed for legs whose
+# market mentions one of the keywords, so corner/card/shot markets are judgeable.
+STAT_FIELDS = {"wonCorners": "corners", "yellowCards": "yellows",
+               "redCards": "reds", "totalShots": "shots",
+               "shotsOnTarget": "on target", "foulsCommitted": "fouls"}
+STAT_KEYWORDS = ("corner", "card", "booking", "shot", "foul")
 
 UA = {"User-Agent": "Mozilla/5.0 (acca-tracker score check)"}
 
@@ -79,9 +88,9 @@ def team_level(query, name):
     return 0
 
 
-def fetch(date):
-    """Return (events, error) for one date; never raises."""
-    url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard?dates={date}"
+def fetch(sport, date):
+    """Return (events, error) for one sport+date; never raises."""
+    url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/scoreboard?dates={date}"
     try:
         req = urllib.request.Request(url, headers=UA)
         with urllib.request.urlopen(req, timeout=25) as r:
@@ -124,6 +133,11 @@ def lookup(events, home, away):
         return None
     _, weakest, e, hc, ac = best
     st = e.get("status", {})
+
+    def stats(c):
+        return {s.get("name"): s.get("displayValue")
+                for s in c.get("statistics", []) if s.get("name") in STAT_FIELDS}
+
     return {
         "state": st.get("type", {}).get("state", ""),
         "desc": st.get("type", {}).get("description", ""),
@@ -133,40 +147,58 @@ def lookup(events, home, away):
         "espn_home": hc.get("team", {}).get("displayName", "?"),
         "espn_away": ac.get("team", {}).get("displayName", "?"),
         "weak": weakest <= 1,
+        "home_stats": stats(hc),
+        "away_stats": stats(ac),
     }
 
 
+def stats_line(r, market):
+    """home-away stat pairs for stat markets, e.g. 'corners 6-5, yellows 0-2'."""
+    if not any(k in market.lower() for k in STAT_KEYWORDS):
+        return ""
+    parts = [f"{label} {r['home_stats'][f]}-{r['away_stats'][f]}"
+             for f, label in STAT_FIELDS.items()
+             if f in r["home_stats"] and f in r["away_stats"]]
+    return ", ".join(parts)
+
+
 def main():
-    events, failed = [], {}
-    for d in sorted(set(RUN_DATES)):
-        ev, err = fetch(d)
-        events += ev
+    legs = [(l + (DEFAULT_SPORT,))[:6] for l in SLIP]
+    pools, failed = {}, {}
+    for sport, date in sorted({(l[5], l[3]) for l in legs if l[3] in RUN_DATES}):
+        ev, err = fetch(sport, date)
+        pools.setdefault(sport, []).extend(ev)
         if err:
-            failed[d] = err
+            failed[(sport, date)] = err
 
     now = datetime.datetime.now().astimezone()
     print(f"CURRENT TIME: {now.strftime('%Y-%m-%d %H:%M:%S %Z (%A)')}")
     print("LIVE SCORES (authoritative ESPN fetch — judge and format from THESE; do not fetch yourself):")
-    for d, err in failed.items():
-        print(f"  WARNING: ESPN fetch failed for {d}: {err} — legs on that date need a fallback source")
+    for (sport, d), err in failed.items():
+        print(f"  WARNING: ESPN fetch failed for {sport} {d}: {err} — legs on that date need a fallback source")
     snapshot = {}
-    for leg, home, away, date, market in SLIP:
+    for leg, home, away, date, market, sport in legs:
         head = f"  Leg {leg}: {home} vs {away} [{date}]"
         if date not in RUN_DATES:
             print(f"{head} -> future date, not checked this run")
             continue
-        if date in failed:
+        if (sport, date) in failed:
             print(f"{head} -> ESPN fetch failed for this date (try fallback source)")
             continue
-        r = lookup(events, home, away)
+        r = lookup(pools.get(sport, []), home, away)
         if r is None:
             print(f"{head} -> NOT FOUND in ESPN feed (try fallback source)")
             continue
         tag = {"pre": "NOT STARTED", "in": "LIVE", "post": "FINISHED"}.get(r["state"], r["state"].upper())
         clk = f" {r['clock']}" if r["clock"] and r["state"] == "in" else ""
-        snapshot[str(leg)] = f"{tag} {r['home_score']}-{r['away_score']}"
+        stats = stats_line(r, market)
+        snapshot[str(leg)] = f"{tag} {r['home_score']}-{r['away_score']}" + (f" [{stats}]" if stats else "")
         line = (f"  Leg {leg}: {home} {r['home_score']}-{r['away_score']} {away} "
                 f"[{date}] -> {tag} ({r['desc']}){clk} | market: {market}")
+        if stats:
+            line += f" | stats: {stats}"
+        elif any(k in market.lower() for k in STAT_KEYWORDS):
+            line += " | stats: not in feed for this fixture — mark leg UNVERIFIABLE"
         if r["weak"]:
             line += (f" | WEAK NAME MATCH — ESPN fixture is '{r['espn_home']} vs "
                      f"{r['espn_away']}': verify this is the right game before using the score")

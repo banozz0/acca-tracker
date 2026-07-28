@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.5.0
+Version: 2.6.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 
@@ -101,14 +101,20 @@ Best supported:
 - Total goals over/under
 - Simple team goals over/under
 - Basic handicap where the line and settlement rule are clear
+- Corners, cards, and shots over/under — ESPN's feed carries live per-team stats for most fixtures; legs where the stat is missing are marked `UNVERIFIABLE` instead of guessed
+
+Experimental:
+
+- Basketball team markets (moneyline/totals) via the same ESPN feed (`basketball/nba`, `basketball/wnba`)
 
 Limited or unsupported unless reliable source data is available:
 
-- Corners, cards, fouls, shots, offsides
+- Offsides, possession, player props
 - First/anytime goalscorer
 - Complex bet builders
 - Team to qualify / lift trophy / aggregate markets
 - Bookmaker bonuses, boosts, insurance, or settlement-specific offers
+- UFC/MMA and F1 (different ESPN data shape — on the roadmap, not supported yet)
 
 See [`knowledge/bet-types.md`](knowledge/bet-types.md).
 

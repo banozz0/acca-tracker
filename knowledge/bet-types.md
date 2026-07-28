@@ -14,13 +14,23 @@ This reference describes conservative status logic for common football acca/parl
 | Team goals over/under | Good | Needs team score and line. |
 | Basic handicap | Medium | Only if line and settlement rule are clear. |
 
+## Stat markets (corners, cards, shots, fouls)
+
+ESPN's scoreboard feed carries live per-team stats for most fixtures (`wonCorners`, `yellowCards`, `redCards`, `totalShots`, `shotsOnTarget`, `foulsCommitted`). The pre-run script prints them as a `stats:` line for legs whose market mentions corners/cards/bookings/shots/fouls, so these markets are supported **when the feed provides the stat for that fixture**:
+
+| Market | Notes |
+| --- | --- |
+| Total / team corners over-under | From `corners H-A`. Half-lines settle cleanly. |
+| Total / team cards over-under | Yellows + reds from the stats line. Confirm the slip's counting rule (e.g. red = 2 cards) — if unclear, say which rule was assumed. |
+| Team shots / shots on target lines | From `shots` / `on target`. |
+
+Status logic: over line already exceeded live -> `WINNING` (effectively secured, confirm at FT); under line already exceeded live -> `DEAD`; otherwise `PENDING` while live, and the FT stats decide `WON`/`LOST`. If the feed has no stats for the fixture (the script prints `stats: not in feed`), mark the leg `UNVERIFIABLE` — never guess stats, and never settle a stat market before full time.
+
 ## Limited or unsupported
 
-These often need data not available from basic public score feeds:
+These often need data not available from public score/stat feeds:
 
-- corners
-- cards
-- shots/fouls/offsides
+- offsides, possession-based or player-prop markets
 - first goalscorer / anytime goalscorer
 - complex bet builders
 - aggregate qualification markets

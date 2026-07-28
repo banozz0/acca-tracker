@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed football accumulator/parlay: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.5.0
+version: 2.6.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
@@ -58,10 +58,11 @@ Officially supported for public use:
 - Total goals over/under, especially half-goal lines such as over 2.5
 - Simple team goals over/under when score data is enough
 - Basic handicap only when the line and settlement rule are clear
+- Corners, cards, and shots over/under lines — the ESPN feed carries live per-team stats for most fixtures; the script prints them as a `stats:` line for these legs. If the script prints `stats: not in feed`, the leg is UNVERIFIABLE. Never settle a stat market before full time.
 
 Treat these as **limited or unsupported unless reliable source data is available**:
 
-- Corners, cards, fouls, shots, offsides, player props
+- Offsides, possession, player props
 - First/anytime goalscorer
 - Bet builders with multiple hidden settlement rules
 - Team to qualify / lift trophy / aggregate markets
@@ -137,7 +138,8 @@ prompt: <self-contained tracking prompt>
 
 **Scheduled agents are time-blind and fetch unreliably.** Hermes does not inject the current time, and asking the model to fetch + parse a 50-event ESPN JSON every run is unreliable — it intermittently skips the call and hallucinates a plausible score, which surfaces as frozen or backwards clocks and vanishing legs. Fix both with a **pre-run score script** whose stdout is injected into the prompt each run:
 
-- Copy `scripts/fetch-scores.py` to the profile's scripts dir — `~/.hermes/profiles/<profile>/scripts/acca-<id>.py` (Hermes resolves `--script` names against the profile scripts dir, not `~/.hermes/scripts`) — fill in its `SLIP` (leg, teams, date, market wording) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`. If that dir is managed by a sync/backup that deletes unmanaged files, add the script to its allowlist or the job will fail with "Script not found".
+- Copy `scripts/fetch-scores.py` to the profile's scripts dir — `~/.hermes/profiles/<profile>/scripts/acca-<id>.py` (Hermes resolves `--script` names against the profile scripts dir, not `~/.hermes/scripts`) — fill in its `SLIP` (leg, teams, date, market wording, plus an optional ESPN sport path for non-football legs, e.g. `basketball/nba`) and `RUN_DATES` (this job's date + any spillover date), and create the job with `--script acca-<id>.py`. If that dir is managed by a sync/backup that deletes unmanaged files, add the script to its allowlist or the job will fail with "Script not found".
+- Basketball team markets (moneyline, totals) work through the same feed via the sport path — experimental. UFC/MMA and F1 are not supported yet: their ESPN data is event cards / race classifications, not team-vs-team, and needs different matching and market logic.
 - Each run it prints a `CURRENT TIME:` line and an authoritative `LIVE SCORES:` block — real ESPN state (`NOT STARTED` / `LIVE` / `FINISHED`) and score per leg. **The agent reads those numbers; it does not fetch scores itself.** This is what keeps scores current and consistent across runs, and it lets a small/cheap model run the tracker reliably.
 - The script searches all `RUN_DATES` together because ESPN files a late-evening European kickoff under the previous US calendar date.
 
@@ -204,7 +206,7 @@ TASK:
 2. Only for a leg the script marks `NOT FOUND` or `ESPN fetch failed`, do one quick fallback check (ESPN/BBC/Sky/TNT/Guardian match centre or TheSportsDB by date, matching both teams + date). If still unresolved, mark it UNVERIFIABLE (non-terminal) and retry next run.
 3. If a leg carries a `WEAK NAME MATCH` warning, verify the named ESPN fixture really is the slip's game (competition + date) before using its score; if it is the wrong fixture, treat the leg as NOT FOUND and use the fallback check instead.
 4. Preserve original slip team names in the report; cite `ESPN` (or the fallback source actually used) per leg.
-5. Judge each leg from the injected state + score against its `market:` wording (see `knowledge/bet-types.md`). Example for match result: `NOT STARTED` -> PENDING; `LIVE` & selection leading -> WINNING; `LIVE` & level/behind -> PENDING; `FINISHED` & selection won -> WON; `FINISHED` & draw/opponent -> LOST. Postponed/abandoned/push -> VOID; missing/ambiguous -> UNVERIFIABLE (non-terminal).
+5. Judge each leg from the injected state + score against its `market:` wording (see `knowledge/bet-types.md`). Example for match result: `NOT STARTED` -> PENDING; `LIVE` & selection leading -> WINNING; `LIVE` & level/behind -> PENDING; `FINISHED` & selection won -> WON; `FINISHED` & draw/opponent -> LOST. Postponed/abandoned/push -> VOID; missing/ambiguous -> UNVERIFIABLE (non-terminal). Corner/card/shot legs are judged from the injected `stats:` values only (`stats: not in feed` -> UNVERIFIABLE); never settle them before FINISHED.
 6. Overall status: WON / LIVE / PARTIAL / PENDING / DEAD / UNVERIFIABLE. If any leg is LOST/DEAD, overall is DEAD (keep the rest as information only). A leg that is live but not yet winning keeps the overall `LIVE`, not `PARTIAL`.
 7. Include TRACKING COMPLETE only when every leg is terminal/settled, or the scheduler says this is the final/max-repeat run. Never complete because a lookup failed or a leg was unverifiable.
 
