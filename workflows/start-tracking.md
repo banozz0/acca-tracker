@@ -6,16 +6,17 @@ Use this workflow only after the user confirms the parsed slip.
 
 1. Build a self-contained tracking prompt with confirmed legs, source rules, codeblock report format, and safety boundaries. For multi-date slips split into per-date jobs, every job's prompt must include the **full** confirmed slip (all legs), not just that date's legs — each run needs all legs to report overall status and to confirm games that finish after midnight.
 2. Attach a per-job score script: copy `scripts/fetch-scores.py` to the profile's scripts dir (`~/.hermes/profiles/<profile>/scripts/acca-<id>.py` — that is where Hermes resolves `--script` names), fill in its `SLIP` (each leg's teams, `YYYYMMDD` date, and market wording) and `RUN_DATES`, and create the job with `--script acca-<id>.py`. The prompt reads the injected `LIVE SCORES:` block instead of fetching — this is what keeps scores reliable (see SKILL.md "Scheduled agents are time-blind and fetch unreliably"). The script also writes a small `<name>.state.json` next to itself for change detection; runs where nothing changed stay `[SILENT]`.
-3. Window the cron schedule to the slip's kickoff dates/times (hours band for the kickoff window; specific dates when known) and size `repeat` to reach the last match night. When kickoff times vary a lot across dates, create one windowed job per match date — see "Varied kickoff times across dates" in SKILL.md (handles spillover past midnight and timezone).
-4. Set delivery to `origin` unless the user explicitly asks for another destination.
-5. Name the job `acca-tracker-<short-id>`.
-6. Tell the user:
+3. If a P&L ledger is configured for this profile (check `acca-ledger-defaults.json` in the profile scripts dir), ensure `scripts/acca_ledger.py` has been copied (unchanged, once) to the profile scripts dir, and append the ledger footer with the filled `LEDGER` config to the per-job script copy — verbatim snippet, config rules, and the one-job-per-slip rule for per-date splits are in `../references/pnl-ledger.md`. Also add one line to that job's tracking prompt: "When you send a message and the injected block contains a `LEDGER:` line, include it; a `LEDGER:` line alone does not justify a message." (The line is status-only — this keeps the settlement note from being swallowed by a silent run without creating new sends.)
+4. Window the cron schedule to the slip's kickoff dates/times (hours band for the kickoff window; specific dates when known) and size `repeat` to reach the last match night. When kickoff times vary a lot across dates, create one windowed job per match date — see "Varied kickoff times across dates" in SKILL.md (handles spillover past midnight and timezone).
+5. Set delivery to `origin` unless the user explicitly asks for another destination.
+6. Name the job `acca-tracker-<short-id>`.
+7. Tell the user:
    - job name
    - check interval
    - approximate expiry/repeat count
    - how to stop tracking
    - that persisted job state contains confirmed match details
-7. Explain that reports are status-only and may mark legs `UNVERIFIABLE` when data is missing or ambiguous. State the status-only/no-advice boundary here, once — recurring updates do not carry a boundary footer.
+8. Explain that reports are status-only and may mark legs `UNVERIFIABLE` when data is missing or ambiguous. State the status-only/no-advice boundary here, once — recurring updates do not carry a boundary footer.
 
 ## Safe default
 

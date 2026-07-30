@@ -54,15 +54,17 @@ for md in ROOT.rglob("*.md"):
         if rel and not (md.parent / rel).resolve().exists():
             errors.append(f"broken link in {md.relative_to(ROOT)}: {target}")
 
-# --- script compiles + unit tests pass ---
-try:
-    py_compile.compile(str(ROOT / "scripts" / "fetch-scores.py"), doraise=True,
-                       cfile=str(Path(tempfile.mkdtemp()) / "fetch-scores.pyc"))
-except py_compile.PyCompileError as e:
-    errors.append(f"fetch-scores.py does not compile: {e}")
-r = subprocess.run([sys.executable, str(ROOT / "scripts" / "test_fetch_scores.py")],
-                   capture_output=True, text=True)
-check(r.returncode == 0, f"unit tests failed:\n{r.stderr[-2000:]}")
+# --- scripts compile + unit tests pass ---
+for script in ("fetch-scores.py", "acca_ledger.py"):
+    try:
+        py_compile.compile(str(ROOT / "scripts" / script), doraise=True,
+                           cfile=str(Path(tempfile.mkdtemp()) / f"{script}c"))
+    except py_compile.PyCompileError as e:
+        errors.append(f"{script} does not compile: {e}")
+for tests in ("test_fetch_scores.py", "test_acca_ledger.py"):
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / tests)],
+                       capture_output=True, text=True)
+    check(r.returncode == 0, f"{tests} failed:\n{r.stderr[-2000:]}")
 
 if errors:
     print("FAIL")

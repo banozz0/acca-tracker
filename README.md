@@ -18,6 +18,7 @@ It helps a Hermes agent parse a football betting slip, confirm the legs with the
 - Sends recurring tracker updates as compact fenced `text` codeblocks for cleaner mobile scanning.
 - Reports each leg status and the overall acca status.
 - Handles missing, ambiguous, or conflicting data as non-terminal `UNVERIFIABLE` instead of guessing.
+- Optional P&L ledger: when configured, a settled acca appends one row (stake, price, outcome, return, running P&L) to a markdown ledger file — record-only, conservative settlement, no advice (see [`references/pnl-ledger.md`](references/pnl-ledger.md)).
 
 ## What it does not do
 
@@ -53,6 +54,7 @@ Then start a fresh Hermes session and load/use the skill by name; skill loading 
 ```bash
 python3 scripts/validate.py        # frontmatter, links, version sync, script unit tests
 python3 scripts/test_fetch_scores.py   # score-fetcher unit tests only (offline)
+python3 scripts/test_acca_ledger.py    # P&L ledger unit tests only (offline)
 ```
 
 The same validation runs in CI on every push (`.github/workflows/validate.yml`).
