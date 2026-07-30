@@ -1,6 +1,6 @@
 # Acca Tracker
 
-Version: 2.8.0
+Version: 2.9.0
 
 Acca Tracker is a standalone Hermes skill for **read-only football accumulator/parlay tracking**.
 

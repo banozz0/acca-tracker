@@ -1,7 +1,7 @@
 ---
 name: acca-tracker
 description: "Use when tracking an already-placed accumulator/parlay — football markets, UFC fight winners, basketball team legs: parse a slip, confirm legs, create bounded read-only cron status checks, and report public match status without betting advice."
-version: 2.8.0
+version: 2.9.0
 author: Hermes Agent community
 license: MIT
 platforms: [linux, macos, windows]
