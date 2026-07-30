@@ -68,7 +68,7 @@ tags: [betting, ledger, pnl]
 - Keep this as the only markdown table in the file: the running total is read from the last table row.
 
 ## 🔗 Related
-- [[Operating Baseline]]
+- Written by the acca-tracker skill's settle hook — rules and config in the skill's `references/pnl-ledger.md`.
 """
 
 
